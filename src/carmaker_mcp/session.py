@@ -15,7 +15,7 @@ from . import log as sessionlog
 from . import outquants
 from .backend import Backend, BackendError, BackendTimeout, Status, check_tcl_allowed, tcl_word
 from .config import Config
-from .guard import GuardError, PathGuard
+from .guard import GuardError, PathGuard, is_within
 from .infofile import InfoFile
 from .movie import MOVIE_EXE, Movie, missing_quantities, missing_size
 from .project import Project
@@ -73,6 +73,8 @@ class Session:
         self._movie_erg: Path | None = None  # result file IPGMovie is replaying (None: the last run)
         self._movie_missing: list[str] = []
         self._logs_pending = False  # save Simulink's logs when the run in progress has ended
+        self._cm4sl_dir: Path | None = None  # MATLAB's working folder when it was last inside the project
+        self._folders_fixed: dict[str, Any] = {}  # what the last start put back
         self._window_capture = capture_window  # (exe name) -> PNG data, width, height
         # Thread of a running parameter study; other threads may not change state meanwhile.
         self.study_owner: int | None = None
@@ -153,14 +155,48 @@ class Session:
 
     @_locked
     def load_testrun(self, name: str, force: bool = False) -> dict:
-        self.require_idle("load a test run")
+        st = self.require_idle("load a test run")
+        fixed = self._restore_folders(st)
         self._popups_begin()
         self._log_mark = self._mark_log()
         try:
             self.backend.load_testrun(name, force)
         except BackendError as e:
             raise BackendError(self._diagnose(str(e))) from e
-        return self._with_popups({"loaded": name})
+        return self._with_popups({"loaded": name, **fixed})
+
+    def _restore_folders(self, st: Status) -> dict:
+        """CarMaker for Simulink expects MATLAB to work inside the project. If something moved MATLAB's
+        working folder away (a script run from elsewhere does), the next start stops at a question
+        ("Matlab's current working directory is now outside of CarMaker's current project directory")
+        and MATLAB answers nothing until it is clicked. Put the folder back first, and the GUI's
+        project too if that question was answered with a change."""
+        b: Any = self.backend
+        if not hasattr(b, "matlab_cwd"):
+            return {}
+        root = self.project.root
+        try:
+            text = b.matlab_cwd()
+        except BackendError:
+            return {}
+        if not text:
+            return {}
+        cwd = Path(text)
+        gui = getattr(st, "project_dir", None)
+        inside = is_within(cwd, root) or any((cwd / n).exists() for n in ("cmproject.txt", "cmproject.lnk"))
+        gui_elsewhere = bool(gui) and not is_within(Path(gui), root) and not is_within(root, Path(gui))
+        if inside and not gui_elsewhere:
+            self._cm4sl_dir = cwd
+            return {}
+        out: dict[str, Any] = {}
+        if not inside:
+            target = self._cm4sl_dir or (root / "src_cm4sl" if (root / "src_cm4sl").is_dir() else root)
+            b.matlab_cd(str(target))
+            out["matlab_folder_restored"] = {"from": str(cwd), "to": str(target)}
+        if gui_elsewhere:
+            b.set_project_dir()
+            out["carmaker_project_restored"] = {"from": gui, "to": str(root)}
+        return out
 
     @_locked
     def start_sim(self, start_timeout_s: float = 90.0, save: str = "save", save_logs: bool = False) -> dict:
@@ -168,7 +204,8 @@ class Session:
             raise BackendError("save must be 'save', 'collect' or 'keep'")
         if save_logs and not hasattr(self.backend, "save_logs"):
             raise BackendError("save_logs needs the MATLAB-connected session")
-        self.require_idle("start a simulation")
+        idle = self.require_idle("start a simulation")
+        self._folders_fixed = self._restore_folders(idle)
         self._logs_pending = bool(save_logs)  # saved when the end of this run is reported
         self._popups_begin()
         if save != "keep":
@@ -218,6 +255,7 @@ class Session:
                                "after_s": round(time.time() - t0, 1), "save_mode": self._save_mode_quiet()}
         if note:
             out["note"] = note
+        out.update(self._folders_fixed)
         return self._with_popups(out)
 
     def _start_failed(self, error: str, simulink: str | None) -> dict:
@@ -391,8 +429,9 @@ class Session:
         if errs:
             parts.append("Session log: " + " | ".join(errs))
         if not msgs and not errs and not sl:
-            parts.append("If the CarMaker GUI is showing a pop-up, answer it there, or let pop-ups "
-                         "answer themselves with cm_popup_timeout; cm_log shows the session log")
+            parts.append("If CarMaker or MATLAB is showing a question, answer it there (MATLAB answers "
+                         "nothing while one waits), or let pop-ups answer themselves with "
+                         "cm_popup_timeout; cm_log shows the session log")
         return ". ".join(parts)
 
     def wait_end(self, timeout_s: float = 45.0, poll_s: float = 1.0,

@@ -177,3 +177,37 @@ def test_gui_settings_are_put_back_when_the_server_exits(session, mock):
     mock.status = lambda: (_ for _ in ()).throw(RuntimeError("MATLAB is gone"))
     session.popup_timeout(3)
     session.at_exit()  # must not raise
+
+
+def test_matlab_folder_outside_the_project_is_put_back_before_a_start(session, mock, project, tmp_path):
+    """Seen live: a script run from another folder moved MATLAB there, and the next start stopped at
+    CarMaker's question about it, with MATLAB answering nothing."""
+    (project / "src_cm4sl").mkdir()
+    mock.cwd, mock.project_dir = str(project / "src_cm4sl"), str(project)
+    assert "matlab_folder_restored" not in session.load_testrun("Sub/Run1")  # nothing to do
+    elsewhere = tmp_path / "Validation"
+    elsewhere.mkdir()
+    mock.cwd = str(elsewhere)
+    mock.polls_until_idle = 2
+    r = session.start_sim()
+    assert r["matlab_folder_restored"] == {"from": str(elsewhere), "to": str(project / "src_cm4sl")}
+    assert mock.cwd == str(project / "src_cm4sl") and ("setprojectdir",) not in mock.calls
+    assert mock.calls.index(("cd", str(project / "src_cm4sl"))) < mock.calls.index(("start",))
+    session.wait_end(timeout_s=5, poll_s=0.01)
+    assert "matlab_folder_restored" not in session.start_sim()
+    session.wait_end(timeout_s=5, poll_s=0.01)
+
+    # the question was answered with "change": the GUI now works in the other folder
+    mock.cwd, mock.gui_project_dir = str(elsewhere), str(elsewhere)
+    r = session.load_testrun("Sub/Run1")
+    assert r["carmaker_project_restored"] == {"from": str(elsewhere), "to": str(project)}
+    assert r["matlab_folder_restored"]["to"] == str(project / "src_cm4sl")
+    assert mock.calls.index(("cd", str(project / "src_cm4sl"))) < mock.calls.index(("setprojectdir",))
+
+
+def test_a_folder_that_names_its_project_is_left_alone(session, mock, project, tmp_path):
+    external = tmp_path / "models"  # CarMaker's documented way of working outside the project
+    external.mkdir()
+    (external / "cmproject.txt").write_text(str(project))
+    mock.cwd, mock.project_dir = str(external), str(project)
+    assert session.load_testrun("Sub/Run1") == {"loaded": "Sub/Run1"} and mock.cwd == str(external)

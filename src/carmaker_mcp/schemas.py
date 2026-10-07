@@ -37,6 +37,8 @@ class StartResult(TypedDict, total=False):
     after_s: float
     save_mode: str | None
     note: str  # set when the run was still being prepared at the time limit
+    matlab_folder_restored: dict[str, str]  # MATLAB's working folder had left the project: from, to
+    carmaker_project_restored: dict[str, str]  # the GUI had been switched to another project: from, to
     popups: list[Popup]
 
 

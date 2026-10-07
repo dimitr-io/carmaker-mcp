@@ -309,6 +309,9 @@ Things to know when you use both:
   wait. This server's run tools are built around that (time-limited waits that are simply repeated).
 * Start and stop runs with this server's tools, so that it can follow the run (result file, errors, storage
   mode).
+* Running a script through the MATLAB server can move MATLAB's working folder out of the CarMaker project.
+  CarMaker for Simulink then stops the next start with a question about the project directory. This server
+  puts the folder back before it loads a test run or starts one, and says so in the result.
 * What is changed through the MATLAB server is not in this server's change log, and `cm_revert_all` does not
   undo it.
 

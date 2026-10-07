@@ -6,6 +6,11 @@ parameters may still change between minor versions.
 
 ## [Unreleased]
 
+### Fixed
+- A MATLAB working folder that had left the CarMaker project made the next start hang at a question of
+  CarMaker for Simulink. `cm_load_testrun` and `cm_start_sim` now put the folder back first, and switch the
+  GUI back to the project if it had been changed.
+
 ## [0.1.1] - 2026-10-07
 
 ### Fixed

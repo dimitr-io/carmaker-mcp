@@ -37,6 +37,16 @@ and waits for a click. Answer it, or let such pop-ups answer themselves: `cm_pop
 the GUI knows of, but not for an edit in an editor window that is still open: there the question comes
 although the status said everything was saved.
 
+**A start hangs, and CarMaker asks "Matlab's current working directory is now outside of CarMaker's current
+project directory. Change CarMaker project directory now?"**
+Something moved MATLAB's working folder out of the project, typically a script that was run from another
+folder. CarMaker for Simulink notices at the next start and waits for a click; MATLAB answers nothing
+meanwhile. Answer **Cancel** (changing would point CarMaker at a folder that is no project) and change MATLAB
+back to the project's `src_cm4sl` folder. `cm_load_testrun` and `cm_start_sim` check this beforehand and put
+the folder back themselves (`matlab_folder_restored` in the result); if the question was answered with a
+change, they also switch CarMaker back to the project (`carmaker_project_restored`). A folder outside the
+project that holds a `cmproject.txt` is CarMaker's own way of working elsewhere and is left alone.
+
 **"the simulation did not start"** or **"simulation did not leave 'idle'"**
 The error already quotes Simulink's error, new pop-ups and log errors. Typical causes: the Simulink model does
 not compile (often because the project's setup script was not run: see `CM_MATLAB_INIT`), a file the test run

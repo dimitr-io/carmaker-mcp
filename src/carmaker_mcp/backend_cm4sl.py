@@ -128,6 +128,17 @@ class Cm4slBackend:
         """Evaluate MATLAB code in the shared session (internal use: cold start)."""
         return self._call("eval", code, nargout=nargout, timeout=timeout)
 
+    def matlab_cwd(self) -> str:
+        """MATLAB's current working folder."""
+        return str(self._call("pwd", nargout=1, timeout=10))
+
+    def matlab_cd(self, folder: str) -> None:
+        self._call("cd", folder, nargout=0, timeout=10)
+
+    def set_project_dir(self) -> None:
+        """Make the CarMaker GUI use the project that MATLAB's working folder belongs to."""
+        self._call("cmcmd", "setprojectdir", nargout=0, timeout=30)
+
     def model_stopped(self, model: str) -> bool:
         """True if Simulink is neither compiling nor running the model."""
         return str(self._call("get_param", model, "SimulationStatus", timeout=5)) == "stopped"

@@ -30,6 +30,8 @@ class MockBackend:
         self.last_result = ""  # what GetLastResultFName answers
         self.popup_msgs: list[tuple[str, str, int]] = []  # (type, text, answer) the GUI "raised"
         self.outquants_file = "OutputQuantities"
+        self.cwd: str | None = None  # MATLAB's working folder (None: not reported)
+        self.gui_project_dir: str | None = None  # set when the GUI was switched to another project
         self.logged_signals = 12  # signals the Simulation Data Inspector holds for the last run
         self.movie_open, self.movie_frozen = False, False  # IPGMovie
         self.movie_camera, self.movie_loaded = "DEFAULT", ""
@@ -44,7 +46,7 @@ class MockBackend:
         return Status(
             connected=True, sim_status=self.sim_status, sim_status_text=sim_status_text(self.sim_status),
             simstate=self.simstate, end_status=self.end_status, active_model="mdl",
-            project_dir=self.project_dir,
+            project_dir=self.gui_project_dir or self.project_dir,
         )
 
     def gui_tcl(self, command: str, timeout_ms: int = 10000) -> tuple[int, str]:
@@ -109,6 +111,17 @@ class MockBackend:
                     f.write(b"\xff\xd8\xff\xe0 mock picture at " + when.encode() + b" \xff\xd9")
             return 0, "1"
         return 0, ""
+
+    def matlab_cwd(self) -> str:
+        return self.cwd or ""  # empty: not known, nothing is checked
+
+    def matlab_cd(self, folder: str) -> None:
+        self.calls.append(("cd", folder))
+        self.cwd = folder
+
+    def set_project_dir(self) -> None:
+        self.calls.append(("setprojectdir",))
+        self.gui_project_dir = None  # back to the project of the working folder
 
     def load_testrun(self, name: str, force: bool = False) -> str:
         self.calls.append(("load", name, force) if force else ("load", name))
