@@ -26,7 +26,7 @@ SECTIONS = [
     ("Results", ("cm_results_list", "cm_results_summary", "cm_results_read", "cm_output_quantities",
                  "cm_output_quantities_edit")),
     ("IPGMovie", "movie"),
-    ("Project data", ("cm_list", "cm_read", "cm_edit", "cm_clone")),
+    ("Project data", ("cm_list", "cm_read", "cm_edit", "cm_clone", "cm_create")),
     ("MATLAB workspace and Simulink", "matlab"),
     ("Standalone instances (no MATLAB)", "standalone"),
     ("Parameter studies", "study"),

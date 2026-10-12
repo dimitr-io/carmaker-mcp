@@ -285,6 +285,18 @@ Copy a project file to a new name in the same kind's folder. Never overwrites.
 | `base` | string | required | Existing file to copy |
 | `new_name` | string | required | Name of the copy (must not exist) |
 
+### `cm_create`
+
+*Create a project data file* · changes state
+
+Write a new project file, for example a tyre property file that differs from an existing one. Never overwrites; the file is logged and cm_revert_all moves it to the trash folder. To change a file that exists use cm_edit, to copy one cm_clone.
+
+| Parameter | Type | Default | Meaning |
+|---|---|---|---|
+| `kind` | `testrun` \| `vehicle` \| `driver` \| `tire` \| `road` \| `trailer` \| `kinematics` \| `config` \| `chassis` \| `misc` \| `sensor` \| `traffic` \| `script` | required | Kind of project data; selects the folder below <project>/Data |
+| `name` | string | required | Name of the new file relative to the kind's folder (must not exist) |
+| `content` | string | required | The whole text of the file, at most 2 MB |
+
 ## MATLAB workspace and Simulink
 
 ### `cm_list_workspace_vars`
@@ -534,21 +546,33 @@ Run one test run several times with different parameter values, one after anothe
 
 *Parameter study progress and results* · read-only
 
-State of a study (running, done, cancelled, failed), the run in progress and one row per finished run: end status, simulation time, distance, result file, statistics of the requested quantities.
+State of a study (running, done, cancelled, failed) and one row per finished run, which also maps every label to its result file. To wait for progress use cm_study_wait.
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
 | `study` | string or null | null | Study id (default: the latest) |
+| `detail` | `compact` \| `full` | `"compact"` | compact: per run its label, end status, time, distance, result file and min / max / mean / last of the quantities. full: also every run's keys and workspace values and all statistics |
+
+### `cm_study_wait`
+
+*Wait for a parameter study* · read-only
+
+Wait until another run of the study has finished or the study has ended, at most timeout_s, and return the compact table (new_rows says how many runs finished meanwhile). Call it again while state is 'running'. Use this for studies instead of cm_wait_end.
+
+| Parameter | Type | Default | Meaning |
+|---|---|---|---|
+| `study` | string or null | null | Study id (default: the latest) |
+| `timeout_s` | number | `45.0` | Longest time to wait in seconds; keep it below your client's tool time-out and call again if not finished |
 
 ### `cm_study_cancel`
 
 *Cancel a parameter study* · destructive
 
-Stop the run in progress, skip the remaining ones and restore the changed workspace values.
+Stop the run in progress, skip the remaining ones and restore the changed workspace values. Only cancel a study this conversation started.
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
-| `study` | string or null | null | Study id (default: the latest) |
+| `study` | string | required | Id of the study to cancel, as cm_study_start returned it. It must be named: a study is not cancelled by default |
 
 ## History and undo
 

@@ -11,14 +11,14 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from . import lock, outquants
 from . import log as sessionlog
-from . import outquants
 from .backend import Backend, BackendError, BackendTimeout, Status, check_tcl_allowed, tcl_word
 from .config import Config
 from .guard import GuardError, PathGuard, is_within
 from .infofile import InfoFile
 from .movie import MOVIE_EXE, Movie, missing_quantities, missing_size
-from .project import Project
+from .project import Project, ProjectError
 from .results import Erg, list_results
 from .state import StateStore
 from .wincapture import CaptureError, capture_window
@@ -124,6 +124,9 @@ class Session:
         }
         if st.connected:
             out.update(self._gui_state())
+        study = self.running_study()
+        if study is not None:
+            out["study_running"] = study
         return out
 
     def _gui_state(self) -> dict:
@@ -145,7 +148,8 @@ class Session:
     def require_idle(self, what: str) -> Status:
         if self.study_owner not in (None, threading.get_ident()):
             raise BackendError(f"cannot {what} while a parameter study is running "
-                               "(cm_study_status, cm_study_cancel)")
+                               "(cm_study_status, cm_study_wait, cm_study_cancel)")
+        self._refuse_foreign_study(what)
         st = self.backend.status()
         if not st.connected:
             raise BackendError(f"cannot {what}: CarMaker not reachable ({st.extra.get('error')})")
@@ -232,7 +236,7 @@ class Session:
                 # Idle again without having been seen running: the preparation failed (typically
                 # the model did not compile), or the run was over between two looks.
                 if st.end_status == "failed":
-                    return self._start_failed("the simulation did not start", self._simulink_error())
+                    return self._start_failed("the simulation did not start", None)
                 return self._started(st, t0)
             elif time.time() - t0 > 1.0:
                 # Never left idle. If Simulink has reported an error since the start AND the model
@@ -246,8 +250,7 @@ class Session:
         if preparing and st is not None and st.connected and not st.idle:
             return self._started(st, t0, f"still '{st.sim_status_text}' after {start_timeout_s:.0f}s: "
                                          "cm_wait_end waits for the run and reports a failure")
-        return self._start_failed(f"simulation did not leave 'idle' within {start_timeout_s:.0f}s",
-                                  self._simulink_error())
+        return self._start_failed(f"simulation did not leave 'idle' within {start_timeout_s:.0f}s", None)
 
     def _started(self, st: Status, t0: float, note: str | None = None) -> dict:
         self._we_started = True
@@ -261,10 +264,39 @@ class Session:
     def _start_failed(self, error: str, simulink: str | None) -> dict:
         self._logs_pending = False
         self._simulink_capture_stop()
-        raise BackendError(self._diagnose(error, simulink=simulink))
+        raise BackendError(self._diagnose(error, simulink=simulink or self._simulink_cause()))
+
+    def _simulink_cause(self) -> str | None:
+        """Simulink's error for a failed start or run. What Simulink reported for this run counts; its
+        last-error memory, which also keeps errors that blocks raise and handle themselves, is used
+        only when neither that nor CarMaker's session log says anything."""
+        sl = self._simulink_error(certain=True)
+        if sl or sessionlog.filter_level(self._log_since(), "error"):
+            return sl
+        return self._simulink_error()
+
+    def running_study(self) -> dict | None:
+        """The parameter study that is running on this CarMaker session: ours or another process's."""
+        cur = lock.read(self.cfg.state_dir)
+        if cur is None:
+            return None
+        shown = ("study", "testrun", "total", "done", "current_label", "started")
+        out = {k: cur[k] for k in shown if k in cur}
+        out["owner"] = "this server" if cur["mine"] else f"another carmaker-mcp server (process {cur['pid']})"
+        return out
+
+    def _refuse_foreign_study(self, what: str) -> None:
+        cur = lock.read(self.cfg.state_dir)
+        if cur is not None and not cur["mine"]:
+            raise BackendError(
+                f"cannot {what}: another carmaker-mcp server (process {cur['pid']}, another client or "
+                f"conversation) is running parameter study {cur.get('study')} on this CarMaker session "
+                f"since {cur.get('started')} ({cur.get('done', 0)} of {cur.get('total', '?')} runs done). "
+                "Wait for it, or cancel it from the conversation that started it")
 
     def stop_sim(self, wait_s: float = 30.0) -> dict:
         """Not locked on purpose: stopping must work while another call is still starting a run."""
+        self._refuse_foreign_study("stop the simulation")
         self.backend.stop_sim()
         out: dict[str, Any] = {"stop_requested": True}
         if wait_s > 0:
@@ -420,14 +452,14 @@ class Session:
         """Extend an error with what was said about it: Simulink's error, GUI pop-ups, new log errors."""
         parts = [error]
         sl = simulink  # only when the caller knows it belongs to this action
+        errs = sessionlog.dedupe(sessionlog.filter_level(self._log_since(), "error"), 3)
+        if errs:  # CarMaker's own account comes first: it names the cause
+            parts.append("Session log: " + " | ".join(errs))
         if sl:
             parts.append("Simulink: " + sl)
         msgs = self._popups_quiet()
         if msgs:
             parts.append("GUI pop-ups: " + "; ".join(f"[{m['type']}] {m['text']}" for m in msgs))
-        errs = sessionlog.dedupe(sessionlog.filter_level(self._log_since(), "error"), 3)
-        if errs:
-            parts.append("Session log: " + " | ".join(errs))
         if not msgs and not errs and not sl:
             parts.append("If CarMaker or MATLAB is showing a question, answer it there (MATLAB answers "
                          "nothing while one waits), or let pop-ups answer themselves with "
@@ -438,6 +470,13 @@ class Session:
                  on_poll: Callable[[float, dict], None] | None = None) -> dict:
         """Wait until the simulation is idle, at most ``timeout_s``. Not locked: other calls (live
         values, stop) stay possible. ``on_poll(elapsed_s, live)`` is called about every 5 s."""
+        study = self.running_study()
+        if study is not None and self.study_owner != threading.get_ident():
+            # Between the runs of a study the simulation is idle: that is not the end of anything.
+            return {"finished": False, "state": "parameter study running", "waited_s": 0.0, "poll_errors": 0,
+                    "note": f"study {study.get('study')} of {study['owner']} is running "
+                            f"({study.get('done', 0)} of {study.get('total', '?')} runs done): use "
+                            "cm_study_wait and cm_study_status, not cm_wait_end"}
         t0 = time.time()
         errors, last_cb, st = 0, 0.0, None
         while True:
@@ -479,7 +518,7 @@ class Session:
         if errs:
             out["log_errors"] = errs
         if out["end_status"] == "failed":  # not for a stopped run: blocks raise harmless errors too
-            sl = self._simulink_error()
+            sl = self._simulink_cause()
             if sl:
                 out["simulink_error"] = sl
         self._simulink_capture_stop()
@@ -533,6 +572,31 @@ class Session:
     @_locked
     def clone_file(self, kind: str, base: str, new_name: str) -> dict:
         return self.project.clone(kind, base, new_name)
+
+    @_locked
+    def create_file(self, kind: str, name: str, content: str) -> dict:
+        return self.project.create(kind, name, content)
+
+    def keys_not_found(self, testrun: str, keys: list[str]) -> list[str]:
+        """Override keys that occur neither in the test run nor in its vehicle file. Such a key may
+        still be right (CarMaker has defaults for keys a file leaves out), but a misspelt one looks
+        the same: it changes nothing and raises no error."""
+        if not keys:
+            return []
+        try:
+            run = InfoFile.load(self.project.path("testrun", testrun))
+        except (OSError, ProjectError, GuardError):
+            return []
+        known = set(run.keys())
+        vehicle = run.get("Vehicle")
+        if vehicle:
+            try:
+                p = self.project.path("vehicle", vehicle)
+                if p.is_file():
+                    known |= set(InfoFile.load(p).keys())
+            except (OSError, ProjectError, GuardError):
+                pass
+        return [k for k in keys if k.split(":", 1)[-1] not in known]
 
     # ---- MATLAB workspace --------------------------------------------------
     def workspace_list(self, scope: str = "base", pattern: str | None = None) -> dict:

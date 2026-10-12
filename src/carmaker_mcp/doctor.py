@@ -204,7 +204,9 @@ def diagnose(cfg: Config, installs: dict[str, str] | None = None, sessions: list
         version, rep.matlab_root = by_release[rep.matlab_release]
         others = sorted(set(by_release) - {rep.matlab_release})
         rep.add("MATLAB", True, f"{rep.matlab_release} at {rep.matlab_root}"
-                + (f" (also installed, not used: {', '.join(others)})" if others else ""))
+                + (f" (also installed, not used: {', '.join(others)}; other MATLAB tools, for example "
+                   f"a MATLAB MCP server, must work in the {rep.matlab_release} session too)"
+                   if others else ""))
         # The engine package of a release only installs on some Python versions.
         top = ENGINE_MAX_PYTHON.get(rep.matlab_release)
         fit = engine_python(rep.matlab_release, rep.cmapi_pythons or None)

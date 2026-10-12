@@ -27,6 +27,9 @@ KINDS = {
 }
 
 
+MAX_CREATE_BYTES = 2_000_000  # of a file written by cm_create
+
+
 class ProjectError(Exception):
     pass
 
@@ -131,7 +134,31 @@ class Project:
         rel = self.guard.relative(p)
         for c in changes:
             self.store.log("file_key", rel, key=c["key"], old=c["old"], new=c["new"])
-        return {"changed": True, "file": rel, "changes": changes}
+        out = {"changed": True, "file": rel, "changes": changes}
+        new = [c["key"] for c in changes if c["old"] is None]
+        if new:
+            out["new_keys"] = new
+            out["note"] = ("new_keys were not in the file before. That is right for a key the file left "
+                           "to its default, and wrong for a misspelt one: CarMaker ignores keys it does not "
+                           "know")
+        return out
+
+    def create(self, kind: str, name: str, content: str) -> dict:
+        """Write a new file of this kind. Never overwrites; a revert moves it to the trash folder."""
+        if not isinstance(content, str) or not content.strip():
+            raise ProjectError("content is empty")
+        data = content.encode("utf-8")
+        if len(data) > MAX_CREATE_BYTES:
+            raise ProjectError(f"content is larger than {MAX_CREATE_BYTES // 1_000_000} MB")
+        dst = self.path(kind, name)
+        if dst.exists():
+            raise ProjectError(f"{name!r} already exists; refusing to overwrite (change it with cm_edit)")
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_bytes(data)
+        self.store.record_created(dst)
+        rel = self.guard.relative(dst)
+        self.store.log("file_create", rel, bytes=len(data))
+        return {"created": rel, "bytes": len(data), "infofile": InfoFile(content).is_infofile}
 
     def clone(self, kind: str, base: str, new_name: str) -> dict:
         src = self.path(kind, base)

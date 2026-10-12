@@ -314,6 +314,14 @@ Things to know when you use both:
   puts the folder back before it loads a test run or starts one, and says so in the result.
 * What is changed through the MATLAB server is not in this server's change log, and `cm_revert_all` does not
   undo it.
+* If several MATLAB releases are installed, make sure the MATLAB server works in the release CarMaker uses
+  (`carmaker-mcp doctor` names it). A MATLAB server that starts a newer release of its own sees neither your
+  model nor the CarMaker session.
+
+**Several conversations on one CarMaker.** Every client and conversation starts a server of its own, and all
+of them drive the same MATLAB and CarMaker. While one of them runs a parameter study, the others refuse to
+load, start or stop anything and say who is running what; `cm_status` shows it as `study_running`. Outside
+studies there is no such guard: two conversations that both start single runs will get in each other's way.
 
 ## Settings
 
@@ -379,11 +387,11 @@ for confirmation where it matters. Every parameter is described in
 | Tool | What it does |
 |---|---|
 | `cm_list`, `cm_read` | List and read test runs, vehicles, drivers, tyres and other project files |
-| `cm_edit`, `cm_clone` | Change keys in a project file (only the edited lines change), or copy a file |
+| `cm_edit`, `cm_clone`, `cm_create` | Change keys in a project file (only the edited lines change), copy a file, or write a new one |
 | `cm_list_workspace_vars`, `cm_get_workspace_var`, `cm_set_workspace_var` | MATLAB base workspace and Simulink model workspace, where controller parameters usually are |
 | `cm_model_get`, `cm_model_set`, `cm_model_save` | Simulink block and model parameters; save the model |
 | `cm_model_logs_save` | After a run, save what Simulink logged (logged signals, To Workspace blocks) and both workspaces to a MAT file. `save_logs` on `cm_start_sim` and `cm_study_start` does it automatically for every run |
-| `cm_study_start`, `cm_study_status`, `cm_study_cancel` | Run one test run with several parameter sets and tabulate the results, without changing any file |
+| `cm_study_start`, `cm_study_wait`, `cm_study_status`, `cm_study_cancel` | Run one test run with several parameter sets and tabulate the results, without changing any file |
 
 **Standalone runs (no MATLAB)**
 

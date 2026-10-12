@@ -55,7 +55,13 @@ test-run keys in memory, no file is edited. Close with `cm_standalone_close`.
   To Workspace blocks) is saved after the run with `cm_model_logs_save`: one MAT file with the signals and
   the base and model workspaces. `cm_start_sim(save_logs=true)` and `cm_study_start(..., save_logs=true)`
   do that for every run (`logs_file` in the result).
-* Several settings of one test run: `cm_study_start` runs them one after another and tabulates the results.
+* Several settings of one test run: `cm_study_start` runs them one after another. Wait with `cm_study_wait`
+  (not `cm_wait_end`); `cm_study_status` gives one short row per run, with its label and result file.
+  Only one study runs on a CarMaker session at a time, also across conversations: `cm_status` shows
+  `study_running`, and loads, starts and stops are refused meanwhile. Cancel only a study you started.
+* A new file (a tyre property file with other values, for example): `cm_clone` to copy and `cm_edit` to change
+  an infofile, or `cm_create(kind, name, content)` to write any text file. Do not write project files with a
+  shell: the server then knows nothing of them and cannot take them back.
 
 ## When something goes wrong
 * `cm_log(level="error")`: CarMaker's session log. `cm_popups`: what the GUI asked or reported.

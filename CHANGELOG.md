@@ -6,7 +6,23 @@ parameters may still change between minor versions.
 
 ## [Unreleased]
 
+### Added
+- `cm_study_wait` blocks until another run of a study has finished or the study has ended.
+- `cm_create` writes a new project file (logged, removed again by `cm_revert_all`).
+- A parameter study now holds the CarMaker session for itself: other server processes (other clients or
+  conversations) refuse to load, start or stop meanwhile, and `cm_status` reports `study_running`.
+- `cm_study_start` and `cm_edit` name keys that occur in no file (`keys_not_found`, `new_keys`).
+
+### Changed
+- `cm_study_status` is compact by default (label, end status, result file, four statistics per quantity);
+  `detail="full"` gives the previous table with every run's parameter values.
+- `cm_study_cancel` needs the study's id, and the study records when and during which run it was cancelled.
+- `cm_wait_end` during a study says so instead of reporting the pause between two runs as an end.
+
 ### Fixed
+- A failed start or run that CarMaker's session log explains was announced with an unrelated Simulink
+  error, one that a model raises and handles at every start. The log errors now come first, and
+  Simulink's last-error memory is only used when nothing else says anything.
 - A MATLAB working folder that had left the CarMaker project made the next start hang at a question of
   CarMaker for Simulink. `cm_load_testrun` and `cm_start_sim` now put the folder back first, and switch the
   GUI back to the project if it had been changed.

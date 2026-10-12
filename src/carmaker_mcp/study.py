@@ -16,6 +16,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from . import lock
 from .backend import BackendError
 from .results import Erg, ErgError
 from .session import Session
@@ -43,6 +44,19 @@ def check_variations(variations: list[dict[str, Any]], mode: str) -> list[dict[s
     return out
 
 
+_ROW = ("label", "end_status", "sim_time_s", "distance_m", "result_file", "logs_file", "stopped", "error",
+        "logs_error", "log_errors", "restore_errors", "missing_quantities", "result_error")
+_STATS = ("min", "max", "mean", "last")
+
+
+def _compact(row: dict) -> dict:
+    out = {k: row[k] for k in _ROW if row.get(k) not in (None, [], "")}
+    if row.get("quantities"):
+        out["quantities"] = {name: {k: q[k] for k in _STATS if k in q}
+                             for name, q in row["quantities"].items()}
+    return out
+
+
 class StudyRunner:
     def __init__(self, session: Session, standalone: Callable[[], Any]):
         self.session = session
@@ -50,6 +64,7 @@ class StudyRunner:
         self._studies: dict[str, dict] = {}
         self._cancel: dict[str, threading.Event] = {}
         self._threads: dict[str, threading.Thread] = {}
+        self._progress: dict[str, threading.Condition] = {}
         self._lock = threading.Lock()
         self._n = 0
 
@@ -62,6 +77,7 @@ class StudyRunner:
         if save_logs and mode != "cm4sl":
             raise BackendError("save_logs needs the MATLAB-connected session (mode 'cm4sl')")
         runs = check_variations(variations, mode)
+        known_keys = self._known_keys(testrun, runs)
         with self._lock:
             active = [s["id"] for s in self._studies.values() if s["state"] == "running"]
             if active:
@@ -79,23 +95,58 @@ class StudyRunner:
             }
             self._studies[sid] = st
             self._cancel[sid] = threading.Event()
+            self._progress[sid] = threading.Condition()
             self._save(st)
             t = threading.Thread(target=self._work, args=(st,), name=f"study-{sid}", daemon=True)
             self._threads[sid] = t
             t.start()
-        return {"study": sid, "runs": len(runs), "state": "running",
-                "note": "poll cm_study_status until state is no longer 'running'"}
-
-    def status(self, study: str | None = None) -> dict:
-        st = self._get(study)
-        out = {k: v for k, v in st.items() if k != "variations"}
-        out["done"] = len(st["rows"])
+        out: dict[str, Any] = {"study": sid, "runs": len(runs), "state": "running",
+                               "note": "cm_study_wait blocks until the next run has finished; "
+                                       "cm_study_status shows the table"}
+        used = {k for v in runs for k in v["keys"]}
+        unknown = sorted(used - set(known_keys)) if known_keys is not None else []
+        if unknown:
+            out["keys_not_found"] = unknown
+            out["note"] += (". keys_not_found occur neither in the test run nor in its vehicle file: a key "
+                            "the files leave to its default looks like that, and so does a misspelt one, "
+                            "which changes nothing")
         return out
 
-    def cancel(self, study: str | None = None) -> dict:
+    def status(self, study: str | None = None, detail: str = "compact") -> dict:
+        """``compact``: what a caller needs while it waits (no parameter values, four statistics per
+        quantity). ``full``: everything, including every run's keys and workspace values."""
+        if detail not in ("compact", "full"):
+            raise BackendError("detail must be 'compact' or 'full'")
+        st = self._get(study)
+        if detail == "full":
+            out = {k: v for k, v in st.items() if k != "variations"}
+            out["done"] = len(st["rows"])
+            return out
+        out = {k: st[k] for k in ("id", "state", "testrun", "total", "current_label", "started", "finished",
+                                  "cancelled", "error") if st.get(k) is not None}
+        out["done"] = len(st["rows"])
+        out["rows"] = [_compact(r) for r in st["rows"]]
+        return out
+
+    def wait_progress(self, study: str | None = None, timeout_s: float = 45.0) -> dict:
+        """Block until another run of the study has finished or the study has ended, at most
+        ``timeout_s``. Returns the compact status."""
+        st = self._get(study)
+        cond = self._progress[st["id"]]
+        done, t0 = len(st["rows"]), time.time()
+        with cond:
+            cond.wait_for(lambda: st["state"] != "running" or len(st["rows"]) > done, timeout_s)
+        out = self.status(st["id"])
+        out["waited_s"] = round(time.time() - t0, 1)
+        out["new_rows"] = len(st["rows"]) - done
+        return out
+
+    def cancel(self, study: str | None = None, by: str = "cm_study_cancel") -> dict:
         st = self._get(study)
         if st["state"] != "running":
             return {"study": st["id"], "state": st["state"], "note": "not running"}
+        st["cancelled"] = {"at": time.strftime("%Y-%m-%d %H:%M:%S"), "by": by,
+                           "during": st.get("current_label")}
         self._cancel[st["id"]].set()
         self._threads[st["id"]].join(90)
         return {"study": st["id"], "state": st["state"], "done": len(st["rows"]), "total": st["total"]}
@@ -104,7 +155,7 @@ class StudyRunner:
         """Block until the study has ended (tests and scripts; tools poll instead)."""
         st = self._get(study)
         self._threads[st["id"]].join(timeout)
-        return self.status(st["id"])
+        return self.status(st["id"], "full")
 
     # ---- internals -------------------------------------------------------------------
     def _get(self, study: str | None) -> dict:
@@ -116,7 +167,32 @@ class StudyRunner:
             raise BackendError(f"unknown study {study!r}; known: {', '.join(self._studies)}")
         return self._studies[study]
 
+    def _known_keys(self, testrun: str, runs: list[dict]) -> list[str] | None:
+        """The override keys that the test run or its vehicle file contain (None: could not look)."""
+        keys = sorted({k for v in runs for k in v["keys"]})
+        try:
+            missing = self.session.keys_not_found(testrun, keys)
+        except BackendError:
+            return None
+        return [k for k in keys if k not in missing]
+
+    def _announce(self, st: dict) -> None:
+        """Tell waiting callers, and other server processes, where the study stands."""
+        if st["mode"] == "cm4sl":
+            if st["state"] == "running":
+                lock.write(self.session.cfg.state_dir, {
+                    "study": st["id"], "testrun": st["testrun"], "total": st["total"],
+                    "done": len(st["rows"]), "current_label": st.get("current_label"),
+                    "started": st["started"]})
+            else:
+                lock.clear(self.session.cfg.state_dir)
+        cond = self._progress.get(st["id"])
+        if cond is not None:
+            with cond:
+                cond.notify_all()
+
     def _save(self, st: dict) -> None:
+        self._announce(st)
         try:
             d = Path(self.session.store.dir) / "studies"
             d.mkdir(parents=True, exist_ok=True)

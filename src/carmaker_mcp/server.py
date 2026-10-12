@@ -524,6 +524,19 @@ def cm_clone(
     return S().clone_file(kind, base, new_name)
 
 
+@_tool(WRITE, "Create a project data file")
+def cm_create(
+    kind: Kind,
+    name: Annotated[str, Field(description="Name of the new file relative to the kind's folder (must not "
+                                           "exist)")],
+    content: Annotated[str, Field(description="The whole text of the file, at most 2 MB")],
+) -> dict:
+    """Write a new project file, for example a tyre property file that differs from an existing one.
+    Never overwrites; the file is logged and cm_revert_all moves it to the trash folder. To change a
+    file that exists use cm_edit, to copy one cm_clone."""
+    return S().create_file(kind, name, content)
+
+
 # ---- MATLAB workspace and Simulink -------------------------------------------------------
 @_tool(READ, "List workspace variables")
 def cm_list_workspace_vars(
@@ -762,17 +775,35 @@ def cm_study_start(
 @_tool(READ, "Parameter study progress and results")
 def cm_study_status(
     study: Annotated[str | None, Field(description="Study id (default: the latest)")] = None,
+    detail: Annotated[Literal["compact", "full"],
+                      Field(description="compact: per run its label, end status, time, distance, result "
+                                        "file and min / max / mean / last of the quantities. full: also "
+                                        "every run's keys and workspace values and all "
+                                        "statistics")] = "compact",
 ) -> dict:
-    """State of a study (running, done, cancelled, failed), the run in progress and one row per finished
-    run: end status, simulation time, distance, result file, statistics of the requested quantities."""
-    return ST().status(study)
+    """State of a study (running, done, cancelled, failed) and one row per finished run, which also maps
+    every label to its result file. To wait for progress use cm_study_wait."""
+    return ST().status(study, detail)
+
+
+@_tool(READ, "Wait for a parameter study")
+async def cm_study_wait(
+    study: Annotated[str | None, Field(description="Study id (default: the latest)")] = None,
+    timeout_s: MaxWait = 45.0,
+) -> dict:
+    """Wait until another run of the study has finished or the study has ended, at most timeout_s, and
+    return the compact table (new_rows says how many runs finished meanwhile). Call it again while
+    state is 'running'. Use this for studies instead of cm_wait_end."""
+    return await asyncio.to_thread(ST().wait_progress, study, timeout_s)
 
 
 @_tool(DESTRUCTIVE, "Cancel a parameter study")
 def cm_study_cancel(
-    study: Annotated[str | None, Field(description="Study id (default: the latest)")] = None,
+    study: Annotated[str, Field(description="Id of the study to cancel, as cm_study_start returned it. It "
+                                            "must be named: a study is not cancelled by default")],
 ) -> dict:
-    """Stop the run in progress, skip the remaining ones and restore the changed workspace values."""
+    """Stop the run in progress, skip the remaining ones and restore the changed workspace values. Only
+    cancel a study this conversation started."""
     return ST().cancel(study)
 
 
