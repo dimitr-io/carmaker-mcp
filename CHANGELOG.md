@@ -12,17 +12,30 @@ parameters may still change between minor versions.
 - A parameter study now holds the CarMaker session for itself: other server processes (other clients or
   conversations) refuse to load, start or stop meanwhile, and `cm_status` reports `study_running`.
 - `cm_study_start` and `cm_edit` name keys that occur in no file (`keys_not_found`, `new_keys`).
+- `cm_study_start` and `cm_set_workspace_var` say when a value will not reach the model: a variable set in
+  the base workspace while the model has one of that name in its own workspace (`workspace_overruled`,
+  `overruled_by`), and a variable that did not exist before (`workspace_not_found`).
+- The setup check tells whether MATLAB sees the server's state folder.
 
 ### Changed
 - `cm_study_status` is compact by default (label, end status, result file, four statistics per quantity);
   `detail="full"` gives the previous table with every run's parameter values.
 - `cm_study_cancel` needs the study's id, and the study records when and during which run it was cancelled.
 - `cm_wait_end` during a study says so instead of reporting the pause between two runs as an end.
+- On Windows the state folder (backups, change log, `server.log`) is now `%USERPROFILE%\.carmaker-mcp`
+  instead of `%LOCALAPPDATA%\carmaker-mcp`. The old folder is copied there at the first start and left as
+  it is. `CM_STATE_DIR` still overrides the place.
 
 ### Fixed
+- Under a client installed as a Windows app package (Claude Desktop), with a MATLAB started outside it,
+  MATLAB did not see the server's state folder: Windows gives such a client a private copy of `AppData`.
+  Simulink's diagnostics were not captured, so a failed start showed a stale or unrelated error, and
+  `cm_model_logs_save` and pictures from IPGMovie failed. The state folder has moved (see Changed).
 - A failed start or run that CarMaker's session log explains was announced with an unrelated Simulink
   error, one that a model raises and handles at every start. The log errors now come first, and
   Simulink's last-error memory is only used when nothing else says anything.
+- A start that CarMaker ended at once (a missing file, for example) could wait for the whole start time
+  before it reported the failure.
 - A MATLAB working folder that had left the CarMaker project made the next start hang at a question of
   CarMaker for Simulink. `cm_load_testrun` and `cm_start_sim` now put the folder back first, and switch the
   GUI back to the project if it had been changed.

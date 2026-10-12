@@ -166,10 +166,10 @@ _PROBE: Any = object()  # "ask the machine" (None is a valid answer for sessions
 
 
 def diagnose(cfg: Config, installs: dict[str, str] | None = None, sessions: list[str] | None = _PROBE,
-             engine: str | None = _PROBE, gui_status: Any = None) -> Report:
+             engine: str | None = _PROBE, gui_status: Any = None, matlab_sees: Any = None) -> Report:
     """Collect all checks. The optional arguments replace the machine probes (for tests);
-    ``gui_status`` is a callable returning a backend ``Status`` and is only used when the shared
-    MATLAB session exists."""
+    ``gui_status`` is a callable returning a backend ``Status`` and ``matlab_sees`` one that tells
+    whether MATLAB sees a folder; both are only used when the shared MATLAB session exists."""
     rep = Report(python=python_version())
     installs = matlab_installs() if installs is None else installs
     sessions = shared_sessions() if sessions is _PROBE else sessions
@@ -273,6 +273,17 @@ def diagnose(cfg: Config, installs: dict[str, str] | None = None, sessions: list
         rep.add("state folder", True, str(cfg.state_dir))
     except OSError as e:
         rep.add("state folder", False, f"{cfg.state_dir}: {e}", "set CM_STATE_DIR to a writable folder")
+        return rep
+    if matlab_sees is not None and sessions is not None and cfg.matlab_session in sessions:
+        try:
+            seen = bool(matlab_sees(cfg.state_dir))
+        except BackendError:
+            return rep  # MATLAB is busy or gone: no statement
+        rep.add("state folder seen by MATLAB", seen,
+                str(cfg.state_dir) if seen else
+                f"MATLAB does not see {cfg.state_dir}: the client runs the server with a private copy of "
+                "that folder. Simulink's error messages, saved logs and IPGMovie pictures need it",
+                "set CM_STATE_DIR to a folder outside AppData, for example one in your user folder")
     return rep
 
 

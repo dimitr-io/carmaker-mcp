@@ -184,3 +184,108 @@ def test_study_names_override_keys_found_in_no_file(runner, session):
     assert r["keys_not_found"] == ["Body.mas"] and "misspelt" in r["note"]
     runner.wait(r["study"])
     assert "keys_not_found" not in runner.start("Sub/Run1", [{"label": "c", "keys": {"Body.mass": 1}}])
+
+
+# ---- found in the live check: a state folder that MATLAB does not see ---------------------------------
+def test_default_state_folder_is_not_below_appdata(monkeypatch, tmp_path):
+    """A client installed as a Windows app package gives the server a private copy of AppData."""
+    from carmaker_mcp import config
+
+    monkeypatch.setattr(config.Path, "home", classmethod(lambda cls: tmp_path / "home"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "AppData" / "Local"))
+    monkeypatch.delenv("XDG_STATE_HOME", raising=False)
+    monkeypatch.setattr(config.sys, "platform", "win32")
+    assert config.Config().state_dir == tmp_path / "home" / ".carmaker-mcp"
+    monkeypatch.setattr(config.sys, "platform", "linux")
+    assert config.Config().state_dir == tmp_path / "home" / ".local" / "state" / "carmaker-mcp"
+
+
+def test_state_of_an_earlier_version_is_copied_once(monkeypatch, tmp_path):
+    from carmaker_mcp import config
+
+    monkeypatch.setattr(config.Path, "home", classmethod(lambda cls: tmp_path / "home"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "AppData" / "Local"))
+    monkeypatch.setattr(config.sys, "platform", "win32")
+    old = tmp_path / "AppData" / "Local" / "carmaker-mcp"
+    new = tmp_path / "home" / ".carmaker-mcp"
+    assert config.adopt_old_state(config.Config()) is None  # nothing to copy
+
+    (old / "backups" / "s1").mkdir(parents=True)
+    (old / "backups" / "s1" / "Vehicle").write_text("x")
+    for name in ("changes.jsonl", "study.lock", "server.log", "simulink-diagnostics.txt"):
+        (old / name).write_text("{}")
+    assert config.adopt_old_state(config.Config(state_dir=tmp_path / "mine")) is None  # CM_STATE_DIR is set
+    new.mkdir(parents=True)  # the setup check may have made it already
+    assert config.adopt_old_state(config.Config()) == old
+    assert sorted(f.name for f in new.iterdir()) == ["backups", "changes.jsonl"]
+    assert (new / "backups" / "s1" / "Vehicle").read_text() == "x" and (old / "changes.jsonl").exists()
+
+    (new / "changes.jsonl").write_text("mine")
+    assert config.adopt_old_state(config.Config()) is None and (new / "changes.jsonl").read_text() == "mine"
+
+
+def test_setup_check_says_when_matlab_does_not_see_the_state_folder(tmp_path, project):
+    from carmaker_mcp import doctor
+    from carmaker_mcp.config import Config
+
+    cfg = Config(project=project, state_dir=tmp_path / "state")
+    asked = []
+
+    def run(sees, sessions=("cm_mcp",)):
+        rep = doctor.diagnose(cfg, installs={}, sessions=list(sessions), engine=None,
+                              matlab_sees=lambda folder: asked.append(folder) or sees())
+        return {c.name: c for c in rep.checks}.get("state folder seen by MATLAB")
+
+    assert run(lambda: True).ok and asked == [cfg.state_dir]
+    c = run(lambda: False)
+    assert c.ok is False and "does not see" in c.detail and "CM_STATE_DIR" in c.fix
+
+    def busy():
+        raise BackendError("MATLAB did not answer")
+
+    assert run(busy) is None  # no statement
+    asked.clear()
+    assert run(lambda: False, sessions=()) is None and asked == []  # no MATLAB to ask
+
+
+def test_a_base_variable_that_the_model_overrules_is_named(session, runner):
+    """Found in the live check: 'TV on' and 'TV off' ran alike, because the model had the switch in
+    its own workspace and the study set it in the base workspace."""
+    from carmaker_mcp.study import _short
+
+    r = session.workspace_set("TV_ON", 0)  # the stand-in's model 'mdl' has TV_ON itself
+    assert r["overruled_by"] == "mdl" and "scope='mdl'" in r["note"]
+    r = session.workspace_set("Kq", 1)
+    assert "overruled_by" not in r and "misspelt" in r["note"]
+    assert session.workspace_set("Kp", 3)["note"] is None
+    assert session.workspace_set("TV_ON", 0, "mdl")["note"] == "changed in memory only; save the model to persist"
+
+    st = runner.start("Sub/Run1", [{"label": "a", "workspace": {"TV_ON": 1, "Kp": 1, "Nope": 2}}])
+    assert st["workspace_overruled"] == ["TV_ON"] and st["workspace_not_found"] == ["Nope"]
+    assert "scope='mdl'" in st["note"]
+    runner.wait(st["study"])
+    ok = runner.start("Sub/Run1", [{"label": "a", "workspace": {"TV_ON": 1}}], scope="mdl")
+    assert "workspace_overruled" not in ok and "workspace_not_found" not in ok
+    runner.wait(ok["study"])
+    assert _short(10.945082664489746) == 10.9451 and _short(3) == 3 and _short(-13.566914558410645) == -13.5669
+
+
+def test_a_start_that_carmaker_fails_is_reported_without_waiting_for_the_time_out(session, mock, project):
+    """Found in the live check: the failure was over between two looks, so the state was never seen
+    leaving idle, and the start waited a minute before it said what the log had said at once."""
+    Errors(mock)
+    session.require_idle = lambda action: None
+    scripted(mock, [(IDLE, "completed"), (IDLE, "failed")])
+    mock.start_sim = lambda: write_log(project, ("ERROR", "Can't read file 'Data/Driver/Template/Nope_Driver'"))
+    t0 = time.time()
+    with pytest.raises(BackendError, match="the simulation did not start. Session log: .*Nope_Driver"):
+        session.start_sim(start_timeout_s=60)
+    assert time.time() - t0 < 10
+
+    # an end status left over from the run before is no failure of this start
+    scripted(mock, [(IDLE, "failed")])
+    mock.start_sim = lambda: None
+    t0 = time.time()
+    with pytest.raises(BackendError, match="did not leave 'idle' within 3s"):
+        session.start_sim(start_timeout_s=3)
+    assert time.time() - t0 >= 3

@@ -3,15 +3,42 @@
 from __future__ import annotations
 
 import os
+import shutil
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
 
 def _default_state_dir() -> Path:
-    base = os.environ.get("LOCALAPPDATA") or os.environ.get("XDG_STATE_HOME") or str(
-        Path.home() / ".local" / "state"
-    )
+    if sys.platform == "win32":
+        # Not below AppData. A client installed as a Windows app package (Claude Desktop) is given a
+        # private copy of AppData: what the server writes there, MATLAB, CarMaker and servers
+        # started by other clients do not see.
+        return Path.home() / ".carmaker-mcp"
+    base = os.environ.get("XDG_STATE_HOME") or str(Path.home() / ".local" / "state")
     return Path(base) / "carmaker-mcp"
+
+
+def _old_state_dir() -> Path | None:
+    """Where versions 0.1 kept the state on Windows."""
+    base = os.environ.get("LOCALAPPDATA")
+    return Path(base) / "carmaker-mcp" if sys.platform == "win32" and base else None
+
+
+def adopt_old_state(cfg: Config) -> Path | None:
+    """Copy the state folder of versions 0.1 (backups, change log) to the default place of today, once.
+    The old folder is left as it is. Returns it if something was copied."""
+    old = _old_state_dir()
+    if old is None or cfg.state_dir != _default_state_dir():
+        return None
+    if (cfg.state_dir / "changes.jsonl").exists() or not (old / "changes.jsonl").is_file():
+        return None
+    try:
+        shutil.copytree(old, cfg.state_dir, dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns("study.lock", "simulink-diagnostics*", "server.log*"))
+    except (OSError, shutil.Error):
+        return None
+    return old
 
 
 @dataclass

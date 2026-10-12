@@ -239,12 +239,15 @@ class Session:
                     return self._start_failed("the simulation did not start", None)
                 return self._started(st, t0)
             elif time.time() - t0 > 1.0:
-                # Never left idle. If Simulink has reported an error since the start AND the model
-                # is stopped (not compiling), the run is not going to begin: say so now instead of
-                # waiting for the time-out. Two looks in a row, to be sure.
+                # Never seen leaving idle. If Simulink has reported an error since the start, or
+                # CarMaker has ended the start as failed and logged why, AND the model is stopped
+                # (not compiling), the run is not going to begin: say so now instead of waiting
+                # for the time-out. Two looks in a row, to be sure.
                 sl = self._simulink_error(certain=True)
-                strikes = strikes + 1 if sl and self._model_stopped(st.active_model) else 0
-                if sl and strikes >= 2:
+                failed = bool(sl) or (st.end_status == "failed"
+                                      and bool(sessionlog.filter_level(self._log_since(), "error")))
+                strikes = strikes + 1 if failed and self._model_stopped(st.active_model) else 0
+                if strikes >= 2:
                     return self._start_failed("the simulation did not start", sl)
             time.sleep(0.5)
         if preparing and st is not None and st.connected and not st.idle:
@@ -322,7 +325,8 @@ class Session:
     def doctor(self) -> dict:
         from . import doctor
 
-        rep = doctor.diagnose(self.cfg, gui_status=self.backend.status)
+        rep = doctor.diagnose(self.cfg, gui_status=self.backend.status,
+                              matlab_sees=getattr(self.backend, "sees_folder", None))
         return {**rep.as_dict(), "uvx_args": doctor.uvx_args(rep)}
 
     # ---- storage of results ------------------------------------------------
@@ -628,8 +632,34 @@ class Session:
         self.backend.workspace_set(name, value, scope)
         new = self.backend.workspace_get(name, scope)
         self.store.log("workspace", name, scope=scope, old=old, new=new, existed=existed)
-        note = None if scope == "base" else "changed in memory only; save the model to persist"
-        return {"scope": scope, "name": name, "old": old, "new": new, "existed": existed, "note": note}
+        out = {"scope": scope, "name": name, "old": old, "new": new, "existed": existed}
+        notes = [] if scope == "base" else ["changed in memory only; save the model to persist"]
+        check: dict[str, Any] = self.workspace_check([name], scope) if scope == "base" else {"overruled": []}
+        if check["overruled"]:
+            out["overruled_by"] = check["model"]
+            notes.append(_overruled(check["overruled"], check["model"]))
+        elif not existed:
+            notes.append(f"{name} did not exist in this workspace before: a misspelt name changes nothing")
+        out["note"] = ". ".join(notes) or None
+        return out
+
+    def workspace_check(self, names: list[str], scope: str = "base") -> dict:
+        """Before or after values are set: the names that are ``new`` in the scope, and the
+        base-workspace names that the active ``model`` has in its own workspace (``overruled``:
+        Simulink takes a variable from the model workspace first, so the value in the base workspace
+        is not the one the model uses). Empty if MATLAB could not be asked."""
+        roots = sorted({n.split(".")[0] for n in names})
+        out: dict[str, Any] = {"new": [], "overruled": [], "model": None}
+        try:
+            have = {i["name"] for i in self.backend.workspace_list(scope)}
+            out["new"] = [r for r in roots if r not in have]
+            model = self.backend.status().active_model if scope == "base" else None
+            if model:
+                own = {i["name"] for i in self.backend.workspace_list(model)}
+                out["overruled"], out["model"] = [r for r in roots if r in own], model
+        except BackendError:
+            pass
+        return out
 
     @_locked
     def workspace_clear(self, name: str, scope: str = "base") -> None:
@@ -947,6 +977,11 @@ class Session:
         res = self.store.restore_files(session)
         self.store.log("restore", session, **res)
         return res
+
+
+def _overruled(names: list[str], model: str) -> str:
+    return (f"the model {model} has {', '.join(names)} in its own workspace and uses that: the value in the "
+            f"base workspace has no effect on it. Use scope='{model}'")
 
 
 def _check_scope(scope: str) -> None:

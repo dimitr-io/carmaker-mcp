@@ -325,7 +325,7 @@ Value of a variable or field. MATLAB objects are described, not converted: read 
 
 *Set a workspace variable* · destructive
 
-Set a variable or field. The old value is logged and cm_revert_all restores it. Model-workspace changes live in memory until cm_model_save. Requires an idle simulation.
+Set a variable or field. The old value is logged and cm_revert_all restores it. Model-workspace changes live in memory until cm_model_save. Requires an idle simulation. overruled_by in the answer: the model has a variable of that name in its own workspace and uses that one, so set it there.
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
@@ -530,7 +530,7 @@ Disconnect; for instances this server launched, also stop the CarMaker process.
 
 *Start a parameter study* · changes state
 
-Run one test run several times with different parameter values, one after another, in the background. Returns a study id at once; poll cm_study_status. Nothing is written to project files.
+Run one test run several times with different parameter values, one after another, in the background. Returns a study id at once; wait with cm_study_wait. Nothing is written to project files. The answer names values that will change nothing: keys_not_found, workspace_not_found and workspace_overruled (the model has the variable in its own workspace: use scope=<model>).
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|

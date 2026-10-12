@@ -49,10 +49,15 @@ _ROW = ("label", "end_status", "sim_time_s", "distance_m", "result_file", "logs_
 _STATS = ("min", "max", "mean", "last")
 
 
+def _short(v: Any) -> Any:
+    """Six significant digits: a result file's single-precision values carry no more."""
+    return float(f"{v:.6g}") if isinstance(v, float) else v
+
+
 def _compact(row: dict) -> dict:
     out = {k: row[k] for k in _ROW if row.get(k) not in (None, [], "")}
     if row.get("quantities"):
-        out["quantities"] = {name: {k: q[k] for k in _STATS if k in q}
+        out["quantities"] = {name: {k: _short(q[k]) for k in _STATS if k in q}
                              for name, q in row["quantities"].items()}
     return out
 
@@ -78,6 +83,9 @@ class StudyRunner:
             raise BackendError("save_logs needs the MATLAB-connected session (mode 'cm4sl')")
         runs = check_variations(variations, mode)
         known_keys = self._known_keys(testrun, runs)
+        names = sorted({n for v in runs for n in v["workspace"]})
+        ws: dict[str, Any] = (self.session.workspace_check(names, scope) if names
+                              else {"new": [], "overruled": []})
         with self._lock:
             active = [s["id"] for s in self._studies.values() if s["state"] == "running"]
             if active:
@@ -110,6 +118,16 @@ class StudyRunner:
             out["note"] += (". keys_not_found occur neither in the test run nor in its vehicle file: a key "
                             "the files leave to its default looks like that, and so does a misspelt one, "
                             "which changes nothing")
+        if ws["overruled"]:
+            out["workspace_overruled"] = ws["overruled"]
+            out["note"] += (f". workspace_overruled: the model {ws['model']} has variables of these names in "
+                            "its own workspace and uses those, so the values set in the base workspace have "
+                            f"no effect on it. Cancel and start again with scope='{ws['model']}'")
+        new = [n for n in ws["new"] if n not in ws["overruled"]]
+        if new:
+            out["workspace_not_found"] = new
+            out["note"] += (". workspace_not_found did not exist in the workspace before: a misspelt name "
+                            "changes nothing")
         return out
 
     def status(self, study: str | None = None, detail: str = "compact") -> dict:
@@ -135,7 +153,9 @@ class StudyRunner:
         cond = self._progress[st["id"]]
         done, t0 = len(st["rows"]), time.time()
         with cond:
-            cond.wait_for(lambda: st["state"] != "running" or len(st["rows"]) > done, timeout_s)
+            # after the last run the end of the study follows at once: wait for that
+            cond.wait_for(lambda: st["state"] != "running" or done < len(st["rows"]) < st["total"],
+                          timeout_s)
         out = self.status(st["id"])
         out["waited_s"] = round(time.time() - t0, 1)
         out["new_rows"] = len(st["rows"]) - done
@@ -210,6 +230,7 @@ class StudyRunner:
                 if cancel.is_set():
                     break
                 st["current"], st["current_label"] = i + 1, var["label"]
+                self._announce(st)  # other processes see which run is on
                 st["rows"].append(one(st, var, cancel))
                 self._save(st)
             st["state"] = "cancelled" if cancel.is_set() else "done"

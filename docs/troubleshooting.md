@@ -1,7 +1,7 @@
 # Troubleshooting
 
 Start with `carmaker-mcp doctor` (or the `cm_doctor` tool): it names most setup problems and their fix. The
-server's own log is `server.log` in the state folder (`%LOCALAPPDATA%\carmaker-mcp` unless `CM_STATE_DIR` is
+server's own log is `server.log` in the state folder (`%USERPROFILE%\.carmaker-mcp` unless `CM_STATE_DIR` is
 set); set `CM_LOG_LEVEL=DEBUG` for more.
 
 ## Setup
@@ -26,6 +26,14 @@ The CarMaker GUI is not open or not connected to this MATLAB. Open it from the S
 **MATLAB takes long to answer, calls time out**
 Raise `CM_ENGINE_TIMEOUT`. While a simulation compiles or runs, MATLAB can be busy; status polls that fail for
 that reason are counted (`poll_errors`), not treated as errors.
+
+**"state folder seen by MATLAB" fails in the setup check**
+Some clients are installed as a Windows app package (Claude Desktop is one). Windows gives the programs such
+a client starts a private copy of `AppData`: a folder the server makes there exists for the server only.
+MATLAB, CarMaker and IPGMovie, started from the Start menu, do not see it, and then Simulink's error
+messages, `cm_model_logs_save` and pictures from IPGMovie fail. Versions 0.1 kept the state folder in
+`%LOCALAPPDATA%\carmaker-mcp` and were affected; the folder is now in the user folder, and the old one is
+copied there once. If you set `CM_STATE_DIR` yourself, choose a folder outside `AppData`.
 
 ## Running
 
@@ -94,6 +102,11 @@ The test run has no end condition. `cm_standalone_launch` stops at `stop_after_s
 `cm_standalone_wait_end` returns the log errors. Often the test run names a driver or tyre file that does not
 exist; `overrides` can point it to an existing one without editing the file. Vehicles whose controller is a
 Simulink model cannot run standalone.
+
+**Two runs of a study give the same result although a MATLAB variable differs**
+The model has a variable of that name in its own workspace and uses that one; the study changed the one in
+the base workspace. `cm_study_start` says so in `workspace_overruled`. Start the study with
+`scope=<model name>`.
 
 ## Editing
 

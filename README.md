@@ -347,7 +347,7 @@ All settings are environment variables in the client entry, set like `CM_PROJECT
 | `CM_MATLAB_DIR` | `<project>/src_cm4sl` | Folder MATLAB starts in (where `cmenv.m` is) |
 | `CM_MATLAB_SESSION` | `cm_mcp` | Name under which MATLAB shares its engine |
 | `CM_RESULT_DIRS` | none | Extra folders to search for result files |
-| `CM_STATE_DIR` | `%LOCALAPPDATA%\carmaker-mcp` | Where backups, the change log and `server.log` are kept (never inside the project) |
+| `CM_STATE_DIR` | `%USERPROFILE%\.carmaker-mcp` | Where backups, the change log and `server.log` are kept (never inside the project). MATLAB and CarMaker must see the folder too, so not one below `AppData` |
 | `CM_ENGINE_TIMEOUT` | `30` | Seconds before a call into MATLAB is given up |
 | `CM_LOG_LEVEL` | `INFO` | Detail of `server.log` |
 

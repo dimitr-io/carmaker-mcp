@@ -50,7 +50,8 @@ test-run keys in memory, no file is edited. Close with `cm_standalone_close`.
   Load the test run again afterwards.
 * Controller parameters usually live in the Simulink **model workspace**:
   `cm_list_workspace_vars(scope=<model>)`, `cm_get_workspace_var`, `cm_set_workspace_var(name, value, scope=<model>)`.
-  They change in memory only; `cm_model_save` persists them.
+  They change in memory only; `cm_model_save` persists them. A variable the model has in its own workspace
+  is not changed by setting one of the same name in the base workspace: the answer then says `overruled_by`.
 * The result file (.erg) holds CarMaker's quantities. What Simulink logged (signals marked for logging,
   To Workspace blocks) is saved after the run with `cm_model_logs_save`: one MAT file with the signals and
   the base and model workspaces. `cm_start_sim(save_logs=true)` and `cm_study_start(..., save_logs=true)`

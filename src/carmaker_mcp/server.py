@@ -24,7 +24,7 @@ from pydantic import Field
 
 from . import __version__, guide
 from .backend import BackendError
-from .config import Config
+from .config import Config, adopt_old_state
 from .guard import GuardError
 from .infofile import InfoFileError
 from .project import ProjectError
@@ -564,7 +564,8 @@ def cm_set_workspace_var(
     scope: Scope = "base",
 ) -> dict:
     """Set a variable or field. The old value is logged and cm_revert_all restores it. Model-workspace
-    changes live in memory until cm_model_save. Requires an idle simulation."""
+    changes live in memory until cm_model_save. Requires an idle simulation. overruled_by in the answer:
+    the model has a variable of that name in its own workspace and uses that one, so set it there."""
     return S().workspace_set(name, value, scope)
 
 
@@ -768,7 +769,9 @@ def cm_study_start(
                                                  "row)")] = False,
 ) -> dict:
     """Run one test run several times with different parameter values, one after another, in the
-    background. Returns a study id at once; poll cm_study_status. Nothing is written to project files."""
+    background. Returns a study id at once; wait with cm_study_wait. Nothing is written to project files.
+    The answer names values that will change nothing: keys_not_found, workspace_not_found and
+    workspace_overruled (the model has the variable in its own workspace: use scope=<model>)."""
     return ST().start(testrun, variations, quantities, mode, scope, max_run_s, save_logs)
 
 
@@ -921,8 +924,10 @@ def _setup_cli(args) -> int:
     from .backend_cm4sl import Cm4slBackend
 
     cfg = Config.from_env()
-    gui = Cm4slBackend(cfg.matlab_session, min(cfg.engine_timeout, 10)).status
-    rep = doctor.diagnose(cfg, gui_status=gui if args.command == "doctor" else None)
+    backend = Cm4slBackend(cfg.matlab_session, min(cfg.engine_timeout, 10))
+    live = args.command == "doctor"
+    rep = doctor.diagnose(cfg, gui_status=backend.status if live else None,
+                          matlab_sees=backend.sees_folder if live else None)
     if args.command == "config":
         try:
             print(doctor.client_config(args.client, rep, cfg))
@@ -951,7 +956,10 @@ def main(argv: list[str] | None = None) -> None:
     if args.command != "serve":
         raise SystemExit(_setup_cli(args))
     cfg = Config.from_env()
+    adopted = adopt_old_state(cfg)
     _setup_logging(cfg)
+    if adopted:
+        log.info("state of an earlier version copied from %s to %s", adopted, cfg.state_dir)
     if args.mock:
         from .backend_mock import MockBackend
 

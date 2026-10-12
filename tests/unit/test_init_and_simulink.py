@@ -134,7 +134,9 @@ def test_without_a_diagnostic_log_the_last_error_is_used(tmp_path):
     b = backend(eval=matlab)
     b.diag_file = tmp_path / "diag.txt"
     b.simulink_error(clear=True)
-    assert b.simulink_error(certain=True) == "Algebraic loop"
+    assert "Undefined function" in b.capture_error
+    assert b.simulink_error(certain=True) is None  # it may be an error that a block handled itself
+    assert b.simulink_error() == "Algebraic loop"
     b.simulink_capture_stop()
     assert all("diary('off');" != c[1][0] for c in b._eng.calls)
 

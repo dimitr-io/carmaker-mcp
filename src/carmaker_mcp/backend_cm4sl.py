@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import io
+import logging
 import threading
 from pathlib import Path
 from typing import Any
@@ -37,6 +38,8 @@ _LOAD_ERRORS = {
     "cancel": "a question of the GUI was answered with Cancel",
     "incomplete": "it was loaded incompletely (a referenced file is missing)",
 }
+
+log = logging.getLogger("carmaker_mcp")
 
 
 def _diary_errors(path: Path, limit: int = 5) -> list[str]:
@@ -67,6 +70,7 @@ class Cm4slBackend:
         self.timeout = timeout
         self.diag_file: Path | None = None  # where Simulink's diagnostics are logged during a run
         self._capturing = False  # diag_file holds the messages of the latest start
+        self.capture_error: str | None = None  # why the latest capture did not begin
         self._diary_on = False  # MATLAB is writing to it
         self._eng: Any = None  # matlab.engine.MatlabEngine once connected
         self._lock = threading.RLock()
@@ -139,6 +143,11 @@ class Cm4slBackend:
         """Make the CarMaker GUI use the project that MATLAB's working folder belongs to."""
         self._call("cmcmd", "setprojectdir", nargout=0, timeout=30)
 
+    def sees_folder(self, folder: Path) -> bool:
+        """True if MATLAB sees the folder. A client that runs the server in a sandbox can give it
+        folders that exist for the server only."""
+        return bool(self._call("isfolder", str(folder), nargout=1, timeout=10))
+
     def model_stopped(self, model: str) -> bool:
         """True if Simulink is neither compiling nor running the model."""
         return str(self._call("get_param", model, "SimulationStatus", timeout=5)) == "stopped"
@@ -161,14 +170,21 @@ class Cm4slBackend:
                     self._call("eval", f"sldiagviewer.diary('off'); if isfile('{f}'), delete('{f}'); end; "
                                        f"sldiagviewer.diary('{f}', 'UTF-8');", nargout=0, timeout=10)
                     self._capturing = self._diary_on = True
-                except (BackendError, OSError):
-                    pass  # no Diagnostic Viewer log in this release: sllasterror only
+                    self.capture_error = None
+                except (BackendError, OSError) as e:
+                    # No Diagnostic Viewer log (MATLAB cannot write the file, or an old release):
+                    # sllasterror only.
+                    if self.capture_error is None:
+                        log.warning("Simulink's diagnostics are not captured: %s", e)
+                    self.capture_error = str(e)
             self._call("eval", "sllasterror([]);", nargout=0, timeout=10)
             return None
         if self._capturing and self.diag_file is not None:
             errors = _diary_errors(self.diag_file)
             if errors or certain:
                 return " | ".join(errors) or None
+        elif certain:
+            return None  # without a capture, what is left may be an error that a block handled itself
         import json
 
         try:
