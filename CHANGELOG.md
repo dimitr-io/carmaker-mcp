@@ -6,6 +6,8 @@ parameters may still change between minor versions.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-12
+
 ### Added
 - `cm_study_wait` blocks until another run of a study has finished or the study has ended.
 - `cm_create` writes a new project file (logged, removed again by `cm_revert_all`).
