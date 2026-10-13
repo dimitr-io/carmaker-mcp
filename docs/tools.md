@@ -132,7 +132,7 @@ Release all quantities from DVA control.
 
 *Read GUI pop-ups* · changes state
 
-Pop-up messages the CarMaker GUI raised for this server's commands (type info/warn/err/question, text, index of the answer given) and the current pop-up timeout. Reading empties the GUI's buffer (it keeps five). cm_load_testrun, cm_start_sim and cm_wait_end already return new ones as 'popups'.
+Pop-up messages the CarMaker GUI raised for this server's commands (type info/warn/err/question, text, index of the answer given) and the current pop-up timeout. Also the "Internal Debugger" dialog that the GUI or IPGMovie shows after an error of its own (type 'internal error', with the program and the call stack): it is read and then closed. Reading empties the GUI's buffer (it keeps five). cm_load_testrun, cm_start_sim and cm_wait_end already return new ones as 'popups'.
 
 ### `cm_popup_timeout`
 
@@ -219,6 +219,10 @@ Add quantities to, or remove them from, the project's output-quantities file (ba
 *Open IPGMovie* · changes state
 
 Open IPGMovie, CarMaker's 3D animation window (or take over one that is open). Open it BEFORE a run: it records a run only while it is open, and cm_movie_snapshot can then show any moment of it.
+
+| Parameter | Type | Default | Meaning |
+|---|---|---|---|
+| `restart` | boolean | `false` | Close a running IPGMovie and start it anew: the way out when its pictures fail with an internal error. It then holds no run |
 
 ### `cm_movie_snapshot`
 

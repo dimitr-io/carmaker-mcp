@@ -39,6 +39,8 @@ During a run, `cm_movie_snapshot()` without `time_s` shows the IPGMovie window a
 can be repeated; do not pass `time_s` during a run (that makes IPGMovie stop following it). A saved result file can be
 replayed with `erg=...` if it holds the vehicle's motion: `cm_output_quantities_edit(preset="movie")` before
 that run.
+If a picture fails with an internal error of IPGMovie, try once more, then `cm_movie_open(restart=true)`.
+CarMaker's programs show errors of their own in a dialog "Internal Debugger": `cm_popups` reads and closes it.
 
 ## Run without MATLAB (standalone)
 `cm_standalone_launch(testrun, overrides?, stop_after_s)` then `cm_standalone_wait_end` (repeat) and

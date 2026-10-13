@@ -108,6 +108,13 @@ The model has a variable of that name in its own workspace and uses that one; th
 the base workspace. `cm_study_start` says so in `workspace_overruled`. Start the study with
 `scope=<model name>`.
 
+**A dialog "Internal Debugger" is on the screen**
+The CarMaker GUI and IPGMovie show it after an error in one of their own scripts. `cm_popups` returns its
+text (type `internal error`) and closes it. If it came from a picture (`cm_movie_snapshot`, "FBO Creation
+error"), try the picture once more; if it fails again, IPGMovie's graphics have stopped working, which was
+seen once after the computer had been under load: `cm_movie_open(restart=true)` starts IPGMovie anew. It
+then holds no run, so pass the run's result file as `erg` or run again.
+
 ## Editing
 
 **"cannot ... while the simulation state is 'running'"**

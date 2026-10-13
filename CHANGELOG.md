@@ -6,6 +6,21 @@ parameters may still change between minor versions.
 
 ## [Unreleased]
 
+### Added
+- The "Internal Debugger" dialog that the CarMaker GUI or IPGMovie shows after an error of its own is now
+  seen: `cm_popups`, and the `popups` of a load, start or finished run, report it as type `internal error`
+  with the program and the call stack, and close it. Before, it stayed on the screen and the agent knew
+  nothing of it.
+- `cm_movie_open(restart=true)` closes IPGMovie and starts it anew, for when its pictures keep failing.
+
+### Fixed
+- A picture that IPGMovie failed to make (an internal error of its graphics, for example "FBO Creation
+  error") was reported after 15 s as "wrote no picture", with IPGMovie's dialog left open. The call now
+  fails at once with IPGMovie's own message, closes the dialog and puts IPGMovie's controls back.
+- `cm_movie_snapshot` on an IPGMovie that was started after the run returned a picture of IPGMovie's
+  empty default scene as the last run. It now says that IPGMovie holds no run, and a time outside the
+  recorded run is refused at once with the recorded range.
+
 ## [0.2.0] - 2026-10-12
 
 ### Added

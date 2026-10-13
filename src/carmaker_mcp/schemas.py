@@ -12,9 +12,12 @@ from typing_extensions import TypedDict  # pydantic needs this one before Python
 
 
 class Popup(TypedDict, total=False):
-    type: str  # info, warn, err, question, busy or bug
+    type: str  # info, warn, err, question, busy or bug; "internal error" for an Internal Debugger dialog
     text: str
     answer: int | str  # index of the answer that was given
+    program: str  # internal error: CarMaker or IPGMovie
+    details: str  # internal error: the call stack the dialog showed
+    closed: bool  # internal error: the dialog was closed after it was read
 
 
 class StatusResult(TypedDict, total=False):

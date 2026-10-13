@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import fnmatch
 import functools
+import logging
 import re
 import threading
 import time
@@ -11,7 +12,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import lock, outquants
+from . import internalerror, lock, outquants
 from . import log as sessionlog
 from .backend import Backend, BackendError, BackendTimeout, Status, check_tcl_allowed, tcl_word
 from .config import Config
@@ -23,6 +24,7 @@ from .results import Erg, list_results
 from .state import StateStore
 from .wincapture import CaptureError, capture_window
 
+_log = logging.getLogger("carmaker_mcp")
 _VAR = re.compile(r"^[A-Za-z_]\w*(\.[A-Za-z_]\w*)*$")
 _MODEL_PATH = re.compile(r"^[A-Za-z_]\w*(/.+)?$")
 
@@ -401,7 +403,22 @@ class Session:
         return result
 
     def popups(self) -> list[dict]:
-        """Buffered pop-up messages, oldest first. Reading removes them from the GUI's buffer."""
+        """Buffered pop-up messages, oldest first, and the "Internal Debugger" dialogs that the GUI
+        or IPGMovie are showing. Reading removes the messages from the GUI's buffer and closes the
+        dialogs."""
+        return self._popup_msgs() + self.internal_errors()
+
+    def internal_errors(self, close: bool = True) -> list[dict]:
+        """Errors of CarMaker's own programs that sit in a dialog (see internalerror.py)."""
+        try:
+            found = internalerror.read_all(self.backend.gui_tcl, close)
+        except BackendError:
+            return []
+        for e in found:
+            _log.warning("%s", internalerror.sentence(e, 1500))
+        return found
+
+    def _popup_msgs(self) -> list[dict]:
         out = []
         for rec in self._tcl(_POPUP_DRAIN).split(_RS):
             parts = rec.split(_US, 2)
@@ -436,7 +453,7 @@ class Session:
         try:
             if self.cfg.popup_timeout is not None and self._popup_timeout_orig is None:
                 self.popup_timeout(self.cfg.popup_timeout)
-            self.popups()
+            self._popup_msgs()  # an internal-error dialog stays: it is reported with the action's result
         except BackendError:
             pass
 
@@ -463,7 +480,9 @@ class Session:
             parts.append("Simulink: " + sl)
         msgs = self._popups_quiet()
         if msgs:
-            parts.append("GUI pop-ups: " + "; ".join(f"[{m['type']}] {m['text']}" for m in msgs))
+            parts.append("GUI pop-ups: " + "; ".join(
+                internalerror.sentence(m) + " [its dialog was closed]" if m["type"] == "internal error"
+                else f"[{m['type']}] {m['text']}" for m in msgs))
         if not msgs and not errs and not sl:
             parts.append("If CarMaker or MATLAB is showing a question, answer it there (MATLAB answers "
                          "nothing while one waits), or let pop-ups answer themselves with "
@@ -837,10 +856,16 @@ class Session:
             self._movie = Movie(self.backend.gui_tcl, self.cfg.state_dir / "movie")
         return self._movie
 
-    def movie_open(self) -> dict:
-        out = self._movie_ctl().open()
+    def movie_open(self, restart: bool = False) -> dict:
+        if restart:
+            self.require_idle("restart IPGMovie")
+            self._movie_erg, self._movie_missing = None, []
+        out = self._movie_ctl().open(restart=restart)
         out["note"] = ("IPGMovie records a run only while it is open. After the run cm_movie_snapshot can "
                        "show any moment of it")
+        if out.get("restarted"):
+            out["note"] = ("IPGMovie was closed and started again: it holds no run now. Pass a result file "
+                           "as erg to cm_movie_snapshot, or run again")
         return out
 
     def movie_snapshot(self, time_s: float | None = None, camera: str | None = None,

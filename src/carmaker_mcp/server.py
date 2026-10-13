@@ -348,8 +348,10 @@ def cm_dva_release() -> dict:
 @_tool(WRITE, "Read GUI pop-ups")
 def cm_popups() -> dict:
     """Pop-up messages the CarMaker GUI raised for this server's commands (type info/warn/err/question,
-    text, index of the answer given) and the current pop-up timeout. Reading empties the GUI's buffer
-    (it keeps five). cm_load_testrun, cm_start_sim and cm_wait_end already return new ones as 'popups'."""
+    text, index of the answer given) and the current pop-up timeout. Also the "Internal Debugger" dialog
+    that the GUI or IPGMovie shows after an error of its own (type 'internal error', with the program
+    and the call stack): it is read and then closed. Reading empties the GUI's buffer (it keeps five).
+    cm_load_testrun, cm_start_sim and cm_wait_end already return new ones as 'popups'."""
     return S().popup_status()
 
 
@@ -445,10 +447,14 @@ def cm_output_quantities_edit(
 
 # ---- IPGMovie ---------------------------------------------------------------------------
 @_tool(WRITE, "Open IPGMovie")
-def cm_movie_open() -> dict:
+def cm_movie_open(
+    restart: Annotated[bool, Field(description="Close a running IPGMovie and start it anew: the way out "
+                                               "when its pictures fail with an internal error. It then "
+                                               "holds no run")] = False,
+) -> dict:
     """Open IPGMovie, CarMaker's 3D animation window (or take over one that is open). Open it BEFORE a
     run: it records a run only while it is open, and cm_movie_snapshot can then show any moment of it."""
-    return S().movie_open()
+    return S().movie_open(restart)
 
 
 @_tool(WRITE, "Take a picture in IPGMovie")

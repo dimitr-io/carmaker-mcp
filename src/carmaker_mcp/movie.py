@@ -10,6 +10,9 @@ What IPGMovie 14.1 does, as observed (see docs/verification.md):
   data for produces no file and no error: exports run asynchronously and are polled for the file.
 * A result file is replayed with ``Movie loadsimdata``. If quantities are missing, IPGMovie shows a
   warning dialog of its own (not a CarMaker pop-up) and lists them in MISSING_QUANTITIES.txt.
+* An error inside IPGMovie during an export (seen: "FBO Creation error") ends in its "Internal Debugger"
+  dialog and no picture; the export status stays "inactive". The dialog is read (internalerror.py).
+* A newly started IPGMovie holds no run and exports its empty default scene: ``recorded`` tells.
 """
 
 from __future__ import annotations
@@ -19,6 +22,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
+from . import internalerror
 from .backend import BackendError, tcl_word
 
 # Camera views every IPGMovie has; sensors, traffic objects and Camera.cfg add more.
@@ -60,9 +64,17 @@ class Movie:
             out["camera"] = m.group(1).strip("{}")
         return out
 
-    def open(self, max_wait_s: float = 30.0) -> dict:
-        """Start IPGMovie, or take over one that is running, and wait until it is ready."""
-        started = False
+    def open(self, max_wait_s: float = 30.0, restart: bool = False) -> dict:
+        """Start IPGMovie, or take over one that is running, and wait until it is ready. ``restart``
+        closes a running one first: the way out when its graphics have stopped working."""
+        started = restarted = False
+        if restart and (self.is_open() or self._ask("Movie attach") == "1"):
+            self._do("Movie quit")
+            t0 = time.time()
+            while self.is_open() and time.time() - t0 < 15:
+                self._sleep(0.5)
+            self._sleep(1.0)  # the process needs a moment to go
+            restarted = True
         if not self.is_open():
             if self._ask("Movie attach") != "1":
                 self._do("Movie start")
@@ -72,7 +84,20 @@ class Movie:
                 if time.time() - t0 > max_wait_s:
                     raise BackendError(f"IPGMovie did not get ready within {max_wait_s:.0f}s")
                 self._sleep(0.5)
-        return {**self.status(), "started": started, "cameras": list(CAMERAS)}
+        out = {**self.status(), "started": started, "cameras": list(CAMERAS)}
+        if restarted:
+            out["restarted"] = True
+        return out
+
+    def recorded(self) -> tuple[float, float] | None:
+        """First and last moment (s) of the run IPGMovie holds; equal when it holds none. None if it
+        cannot be asked (needs the GUI's ``Movie eval``, see internalerror.py)."""
+        answer = self._ask("Movie eval eval {list [SimData getstarttime] [SimData getendtime]}")
+        try:
+            start, end = (float(x) for x in (answer or "").split())
+        except ValueError:
+            return None
+        return start, end
 
     # ---- pictures -------------------------------------------------------------
     def camera(self, name: str) -> None:
@@ -84,11 +109,26 @@ class Movie:
     def load(self, erg: Path) -> None:
         self._do(f"Movie loadsimdata {tcl_word(erg.as_posix())}")
         self._sleep(2.0)  # the command returns before the scene is built
+        t0 = time.time()
+        while time.time() - t0 < 8.0:  # and before the file's data is there
+            held = self.recorded()
+            if held is None or held[1] > held[0]:
+                break
+            self._sleep(0.5)
 
     def export(self, when: float | None, width: int, height: int, timeout_s: float = 15.0) -> Path:
         """Write one picture of the main window: at ``when`` seconds, or at the latest moment held."""
+        held = self.recorded()
+        if held is not None and held[1] <= held[0]:
+            raise BackendError(
+                "IPGMovie holds no run: it was started after the last run had ended, and would show its "
+                "empty default scene. Run again with IPGMovie open, or pass the run's result file as erg")
+        if held is not None and when is not None and not held[0] - 0.01 <= when <= held[1] + 0.01:
+            raise BackendError(f"IPGMovie holds the run from {held[0]:g} s to {held[1]:g} s: there is no "
+                               f"picture for t = {when:g} s")
         target = self._new_file(".jpg")
         t = "end" if when is None else f"{when:g}"
+        internalerror.read(self._tcl, "IPGMovie")  # a dialog of an earlier error is not this export's
         self._do(f"Movie export window {tcl_word(target.as_posix())} 0 -start {t} -end {t} "
                  f"-width {int(width)} -height {int(height)} -format jpeg -overwrite -async")
         t0 = time.time()
@@ -99,6 +139,14 @@ class Movie:
                 return target
             if state != "inactive" and not state.startswith("exporting"):
                 raise BackendError(f"IPGMovie could not export the picture: {state}")
+            failed = internalerror.read(self._tcl, "IPGMovie")
+            if failed:
+                internalerror.tidy_movie(self._tcl)
+                raise BackendError(
+                    f"{internalerror.sentence(failed, 600)}. No picture was written; the error's dialog in "
+                    "IPGMovie was closed. Try once more. If it fails again, IPGMovie's graphics have "
+                    "stopped working: cm_movie_open(restart=true) starts it anew (it then holds no run: "
+                    "pass the result file as erg, or run again)")
             self._sleep(0.2)
         at = "" if when is None else f" for t = {when:g} s"
         raise BackendError(

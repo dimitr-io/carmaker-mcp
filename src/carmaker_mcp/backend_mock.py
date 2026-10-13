@@ -37,6 +37,9 @@ class MockBackend:
         self.movie_camera, self.movie_loaded = "DEFAULT", ""
         self.movie_cameras = {"DEFAULT", "Bird's Eye View", "Left Side", "Right Side"}
         self.movie_recorded_s = 100.0  # it holds a run of this length
+        self.movie_export_error: str | None = None  # every export fails with this internal error
+        self.movie_eval = True  # the GUI has the undocumented ``Movie eval``
+        self.internal_errors: dict[str, tuple[str, str]] = {}  # program -> (message, details) of its dialog
 
     def status(self) -> Status:
         if self.sim_status >= 0 and self.polls_until_idle > 0:
@@ -67,6 +70,8 @@ class MockBackend:
             return 0, self.last_result
         if command == "OutQuantsGetFName":
             return 0, self.outquants_file
+        if ".bgerror" in command or "Export::Stop" in command:
+            return self._internal_error(command)
         if command.startswith("Movie "):
             return self._movie(command)
         if "PopupCtrl nextmsg" in command:  # the drain script of Session.popups
@@ -75,10 +80,30 @@ class MockBackend:
             return 0, out
         return 0, ""
 
+    def _internal_error(self, command: str) -> tuple[int, str]:
+        """The "Internal Debugger" dialog of the GUI and of IPGMovie (reached with ``Movie eval``)."""
+        program = "IPGMovie" if command.startswith("Movie eval ") else "CarMaker"
+        if program == "IPGMovie" and not (self.movie_open and self.movie_eval):
+            return -1, 'IPGMovie: bad subcommand "eval"' if self.movie_open else "IPGMovie not available."
+        if "Export::Stop" in command:
+            return 0, "1"
+        if "destroy .bgerror" in command:
+            self.internal_errors.pop(program, None)
+            return 0, ""
+        if program not in self.internal_errors:
+            return 0, ""
+        message, details = self.internal_errors[program]
+        return 0, f"{message}{chr(31)}{details}"
+
     def _movie(self, command: str) -> tuple[int, str]:
         """IPGMovie as the GUI's ``Movie`` commands show it."""
         if command == "Movie start":
             self.movie_open = True
+            return 0, ""
+        if command == "Movie quit":
+            self.movie_open, self.movie_loaded, self.movie_export_error = False, "", None
+            self.movie_recorded_s = 0.0  # a new IPGMovie holds no run
+            self.internal_errors.pop("IPGMovie", None)
             return 0, ""
         if command == "Movie attach":
             return 0, "0"
@@ -86,6 +111,10 @@ class MockBackend:
             return -1, "IPGMovie not available. Call 'Movie start' first."
         if command == "Movie status initialized":
             return 0, "1"
+        if command.startswith("Movie eval "):
+            if not self.movie_eval:
+                return -1, 'IPGMovie: bad subcommand "eval"'
+            return (0, f"0.0 {self.movie_recorded_s}") if "SimData getendtime" in command else (0, "")
         if command == "Movie status online":
             return 0, str(int(self.sim_status >= 0 and not self.movie_frozen))
         if command == "Movie window info":
@@ -99,6 +128,7 @@ class MockBackend:
             return 0, ""
         if command.startswith("Movie loadsimdata "):
             self.movie_loaded = command[len("Movie loadsimdata "):].strip("{}")
+            self.movie_recorded_s = self.movie_recorded_s or 100.0  # the file's run
             return 0, ""
         if command.startswith("Movie export status"):
             return 0, "inactive"
@@ -106,7 +136,14 @@ class MockBackend:
         if m:
             self.movie_frozen = self.sim_status >= 0  # a picture ends the recording of a running sim
             when = m.group(2)
-            if when == "end" or float(when) <= self.movie_recorded_s:
+            if self.movie_export_error:  # its graphics fail: a dialog and no picture
+                self.internal_errors["IPGMovie"] = (
+                    "Internal Error in IPGMovie Version 14.1.1\n" + self.movie_export_error
+                    + "\n\nPlease report this bug to IPG Automotive GmbH.",
+                    "ERROR: " + self.movie_export_error + '\n\nprocedure "OSD::FBOSetup" line 7:\n'
+                    '   "FBO new $wfbo $hfbo"\n\nGlobal Variables\nCamera::ViewNo\t0:0\n'
+                    "Application\nIPGMovie\n")
+            elif when == "end" or float(when) <= self.movie_recorded_s:
                 with open(m.group(1).strip("{}"), "wb") as f:
                     f.write(b"\xff\xd8\xff\xe0 mock picture at " + when.encode() + b" \xff\xd9")
             return 0, "1"

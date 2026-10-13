@@ -139,6 +139,9 @@ def test_time_without_data_is_an_error_not_a_hang(session, mock):
     session.movie_open()
     session._movie._sleep = lambda s: None
     mock.movie_recorded_s = 30.0
+    with pytest.raises(BackendError, match=r"holds the run from 0 s to 30 s: there is no picture for t = 60 s"):
+        session._movie.export(60.0, 320, 180, timeout_s=0.3)
+    mock.movie_eval = False  # IPGMovie cannot be asked what it holds: the export is tried and waited for
     with pytest.raises(BackendError, match=r"wrote no picture for t = 60 s.*must be open during the run"):
         session._movie.export(60.0, 320, 180, timeout_s=0.3)
 
