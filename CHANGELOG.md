@@ -6,6 +6,8 @@ parameters may still change between minor versions.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-15
+
 ### Added
 - The "Internal Debugger" dialog that the CarMaker GUI or IPGMovie shows after an error of its own is now
   seen: `cm_popups`, and the `popups` of a load, start or finished run, report it as type `internal error`
