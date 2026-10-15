@@ -777,7 +777,10 @@ def cm_study_start(
     """Run one test run several times with different parameter values, one after another, in the
     background. Returns a study id at once; wait with cm_study_wait. Nothing is written to project files.
     The answer names values that will change nothing: keys_not_found, workspace_not_found and
-    workspace_overruled (the model has the variable in its own workspace: use scope=<model>)."""
+    workspace_overruled (the model has the variable in its own workspace: use scope=<model>). IPGDriver
+    corners only as fast as its limit Driver.Acc.ayMax allows (a test-run key): to compare variants on
+    time, sweep it for each variant (keys {'Driver.Acc.ayMax': v}, steps of 0.5 around the current value)
+    and compare each variant's fastest completed run."""
     return ST().start(testrun, variations, quantities, mode, scope, max_run_s, save_logs)
 
 

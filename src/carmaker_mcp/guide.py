@@ -11,7 +11,9 @@ INSTRUCTIONS = (
     "If nothing is running yet call cm_session_start; if a run fails read cm_log and cm_popups. "
     "Edits (cm_edit, cm_set_workspace_var, cm_model_set) change real project files and the live model: "
     "each is backed up and logged, and cm_revert_all undoes this session's changes. "
-    "The simulation must be idle for loads, edits and reverts."
+    "The simulation must be idle for loads, edits and reverts. "
+    "Lap times depend on the driver's own limits (test-run keys Driver.Acc.*): before comparing vehicle "
+    "variants on time, find each variant's limit with a study (resource carmaker://guide, 'Drive at the limit')."
 )
 
 GUIDE = """\
@@ -65,6 +67,26 @@ test-run keys in memory, no file is edited. Close with `cm_standalone_close`.
 * A new file (a tyre property file with other values, for example): `cm_clone` to copy and `cm_edit` to change
   an infofile, or `cm_create(kind, name, content)` to write any text file. Do not write project files with a
   shell: the server then knows nothing of them and cannot take them back.
+
+## Drive at the limit (IPGDriver)
+IPGDriver drives each corner only as fast as its own limits allow, not as fast as the car could:
+`Driver.Acc.ayMax` (lateral, m/s^2), `Driver.Acc.axMax` and `Driver.Acc.axMin` (longitudinal), scaled by
+`Driver.Acc.Factor.Lateral`, `.Accel` and `.Decel`. They are keys of the test run:
+`cm_read("testrun", name, prefix="Driver.Acc")`. Files in Data/Driver are templates that the GUI copies into a
+test run; editing one changes no test run.
+* A run whose largest `Car.ay` is close to `Driver.Acc.ayMax` was limited by the driver, not by the car.
+  Two vehicle variants (a controller on and off, for example) then drive nearly the same speeds, and their
+  times say little about the vehicles.
+* To compare at the limit, find each variant's own best value: one `cm_study_start` with a variation per
+  value, for example `{'label': 'on 15.5', 'keys': {'Driver.Acc.ayMax': 15.5}, 'workspace': {...}}` over a
+  range around the current value in steps of 0.5, and quantities `Car.ay`, `Car.v`, `DM.Steer.Ang`.
+  Study keys change nothing on disk. Refine with smaller steps around the best value.
+* Judge a run by the time it needs for the course (`sim_time_s`, when the test run ends at the end of its
+  course) and only among runs that ended `completed`. A limit that is too high shows as a longer time, a run
+  that does not complete, or steering at its stop; look at a picture of the run (IPGMovie) when in doubt.
+  Report the value each variant was compared at.
+* `DM.Lap.Time` and `DM.Lap.No` hold lap times only when the course is driven as laps: check them before
+  relying on them.
 
 ## When something goes wrong
 * `cm_log(level="error")`: CarMaker's session log. `cm_popups`: what the GUI asked or reported.
