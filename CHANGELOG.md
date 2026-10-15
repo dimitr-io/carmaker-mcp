@@ -6,6 +6,8 @@ parameters may still change between minor versions.
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-10-15
+
 ### Added
 - The server instructions, the guide and `cm_study_start` tell an agent that IPGDriver corners only as
   fast as its own limit `Driver.Acc.ayMax` allows, and how to find each vehicle variant's limit with a study
