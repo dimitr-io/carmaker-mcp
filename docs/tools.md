@@ -81,7 +81,7 @@ Stop the running simulation. With wait_s > 0 it returns what cm_wait_end returns
 
 *Wait for the simulation to end* · read-only
 
-Wait until the simulation is idle again. finished=true: end status, simulation time and distance, result_file, new log errors and pop-ups. finished=false: current state and live values; call again to keep waiting.
+Wait until the simulation is idle again. finished=true: end status, simulation time and distance, result_file, new log errors and warnings (settings CarMaker ignored show up there) and pop-ups. finished=false: current state and live values; call again to keep waiting.
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
@@ -269,7 +269,7 @@ Key / value pairs of a CarMaker infofile. Large files are truncated: filter by k
 
 *Edit a project data file* · destructive
 
-Change keys in a project file in place (backed up first, logged; only the edited lines change). Requires an idle simulation; load the test run again afterwards. A test run's driver is set with 'Vehicle.DriverTemplate.FName'; driver parameters are edited in the template (kind 'driver', name 'Template/<name>'), a file other test runs share: tell the user which one changed.
+Change keys in a project file in place (backed up first, logged; only the edited lines change). Requires an idle simulation; load the test run again afterwards. Driver parameters belong in the driver template (kind 'driver', 'Template/<name>'), which other test runs share: say which changed.
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
@@ -281,7 +281,7 @@ Change keys in a project file in place (backed up first, logged; only the edited
 
 *Copy a project data file* · changes state
 
-Copy a project file to a new name in the same kind's folder. Never overwrites. A copied test run keeps the source's driver and its knowledge (see `driver` in the answer): check them before using it with another vehicle.
+Copy a project file to a new name in the same kind's folder. Never overwrites. A copied test run keeps the source's driver and knowledge (`driver`): check them for another vehicle.
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|

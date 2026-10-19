@@ -302,7 +302,8 @@ async def cm_wait_end(
     poll_s: Annotated[float, Field(description="Seconds between status polls", gt=0)] = 1.0,
 ) -> WaitResult:
     """Wait until the simulation is idle again. finished=true: end status, simulation time and
-    distance, result_file, new log errors and pop-ups. finished=false: current state and live values;
+    distance, result_file, new log errors and warnings (settings CarMaker ignored show up there) and
+    pop-ups. finished=false: current state and live values;
     call again to keep waiting."""
     return await asyncio.to_thread(S().wait_end, timeout_s, poll_s, _progress(ctx, timeout_s))  # type: ignore[return-value]
 
@@ -517,9 +518,8 @@ def cm_edit(
                                                            "'SKIDPAD.rd5'}; a null value removes the key")],
 ) -> dict:
     """Change keys in a project file in place (backed up first, logged; only the edited lines change).
-    Requires an idle simulation; load the test run again afterwards. A test run's driver is set with
-    'Vehicle.DriverTemplate.FName'; driver parameters are edited in the template (kind 'driver', name
-    'Template/<name>'), a file other test runs share: tell the user which one changed."""
+    Requires an idle simulation; load the test run again afterwards. Driver parameters belong in the
+    driver template (kind 'driver', 'Template/<name>'), which other test runs share: say which changed."""
     return S().edit_file(kind, name, overrides)
 
 
@@ -530,8 +530,7 @@ def cm_clone(
     new_name: Annotated[str, Field(description="Name of the copy (must not exist)")],
 ) -> dict:
     """Copy a project file to a new name in the same kind's folder. Never overwrites. A copied test run
-    keeps the source's driver and its knowledge (see `driver` in the answer): check them before using
-    it with another vehicle."""
+    keeps the source's driver and knowledge (`driver`): check them for another vehicle."""
     return S().clone_file(kind, base, new_name)
 
 

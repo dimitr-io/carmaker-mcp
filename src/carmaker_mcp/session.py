@@ -540,6 +540,9 @@ class Session:
         errs = sessionlog.dedupe(sessionlog.filter_level(new, "error"))
         if errs:
             out["log_errors"] = errs
+        warns = sessionlog.dedupe(sessionlog.warnings_only(new), 5)
+        if warns:
+            out["log_warnings"] = warns
         if out["end_status"] == "failed":  # not for a stopped run: blocks raise harmless errors too
             sl = self._simulink_cause()
             if sl:

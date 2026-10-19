@@ -19,7 +19,11 @@ INSTRUCTIONS = (
     "unclear. Driver parameters (Driver.Acc.*, dtAccBrake, StWhlAngle*) are changed in the template file "
     "(cm_edit kind 'driver'), which other test runs share: tell the user which file changed. Lap times "
     "depend on the driver's limit Driver.Acc.ayMax: compare vehicle variants each at its own limit. "
-    "More in the resource carmaker://guide."
+    "More in the resource carmaker://guide. "
+    "A run that ends 'completed' does not prove every setting was applied: CarMaker reports ignored or "
+    "unsupported parameters only as WARNING lines in the session log (log_warnings of cm_wait_end and of "
+    "study rows, cm_log(level='warning')), for example a tyre override not supported at the tyre file's "
+    "FITTYP. A result identical to the baseline after a parameter change is a reason to read them."
 )
 
 GUIDE = """\

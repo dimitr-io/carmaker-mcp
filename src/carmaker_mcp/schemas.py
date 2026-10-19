@@ -56,6 +56,7 @@ class WaitResult(TypedDict, total=False):
     distance_m: float
     result_file: str | None
     log_errors: list[str]
+    log_warnings: list[str]  # new WARNING lines of the session log, repeated ones collapsed
     simulink_error: str  # why Simulink did not compile or run the model
     logs_file: str  # MAT file with Simulink's logged data (start with save_logs)
     logs_error: str  # why that file could not be written

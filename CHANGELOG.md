@@ -15,6 +15,16 @@ parameters may still change between minor versions.
 - The server instructions and the guide say that the test run chooses the driver, that driver parameters
   are changed in the template, and that steering from input from file arrives about 0.14 s late.
 
+- `cm_wait_end` and each study row return `log_warnings`: the run's new WARNING lines of the session log,
+  repeated ones collapsed (at most five). The server instructions say that a completed run does not prove
+  every setting was applied.
+
+### Fixed
+- `cm_log(level="warning"/"error")`, `log_errors` and the error check after a start missed messages that
+  libraries write indented, such as the tyre library's `WARNING - Override value ... is ignored, because it
+  is not supported at fittype 62`. A tyre setting that CarMaker ignored therefore left no trace in the
+  answers.
+
 ### Changed
 - The guide no longer says that driver templates do not affect a test run, nor advises sweeping
   `Driver.Acc.ayMax` as study keys: a test run that names a template uses it, and whether such keys take

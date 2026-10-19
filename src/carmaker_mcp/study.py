@@ -45,7 +45,7 @@ def check_variations(variations: list[dict[str, Any]], mode: str) -> list[dict[s
 
 
 _ROW = ("label", "end_status", "sim_time_s", "distance_m", "result_file", "logs_file", "stopped", "error",
-        "logs_error", "log_errors", "restore_errors", "missing_quantities", "result_error")
+        "logs_error", "log_errors", "log_warnings", "restore_errors", "missing_quantities", "result_error")
 _STATS = ("min", "max", "mean", "last")
 
 
@@ -278,7 +278,7 @@ class StudyRunner:
                     end = s.stop_sim(wait_s=60)
                     break
             for k in ("end_status", "sim_time_s", "distance_m", "result_file", "logs_file", "logs_error",
-                      "log_errors", "popups"):
+                      "log_errors", "log_warnings", "popups"):
                 if end.get(k) is not None:
                     row[k] = end[k]
             self._summarise(row, st)

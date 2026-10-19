@@ -6,6 +6,9 @@ The log is tab separated: a keyword, then the text, for example::
     WARNING     IPGDriver: ...
     ERROR       PowerTrain.Motor Mapping: can't initialize torque map
     SIM_END     My Runs/Braking   5.055s   76.1026m
+
+Libraries that CarMaker loads write their own messages indented and in another form, for example the
+tyre library's ``<TAB><TAB>WARNING - Override value ... is ignored``: their level is the first word too.
 """
 
 from __future__ import annotations
@@ -15,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 _LEVELS = {"error": ("ERROR", "FATAL"), "warning": ("ERROR", "FATAL", "WARNING")}
+_LEVEL = re.compile(r"^\s*(FATAL|ERROR|WARNING)\b")
 _SIM_END = re.compile(r"^SIM_END\s+(?P<name>.*?)\s+(?P<time>[0-9.eE+-]+)s\s+(?P<dist>[0-9.eE+-]+)m\s*$")
 
 
@@ -47,7 +51,13 @@ def filter_level(lines: list[str], level: str = "all") -> list[str]:
         return lines
     if level not in _LEVELS:
         raise ValueError("level must be all, warning or error")
-    return [ln for ln in lines if ln.split("\t", 1)[0].strip() in _LEVELS[level]]
+    keep = _LEVELS[level]
+    return [ln for ln in lines if (m := _LEVEL.match(ln)) and m[1] in keep]
+
+
+def warnings_only(lines: list[str]) -> list[str]:
+    """The warning lines, without errors."""
+    return [ln for ln in lines if (m := _LEVEL.match(ln)) and m[1] == "WARNING"]
 
 
 def tail(project_root: Path, lines: int = 50, level: str = "all") -> dict:
