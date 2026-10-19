@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import fnmatch
 from pathlib import Path
+from typing import Any
 
 from .guard import GuardError, PathGuard, is_within
 from .infofile import InfoFile, InfoFileError, diff_values
@@ -28,6 +29,14 @@ KINDS = {
 
 
 MAX_CREATE_BYTES = 2_000_000  # of a file written by cm_create
+
+# What a test run's IPGDriver is: chosen by the test run, not by the vehicle.
+DRIVER_TEMPLATE = "Vehicle.DriverTemplate.FName"  # a file in Data/Driver/Template, or "TestRun"
+DRIVER_KEYS = (
+    "Driver.Acc.axMax", "Driver.Acc.axMin", "Driver.Acc.ayMax", "Driver.Long.dtAccBrake",
+    "Driver.Vel.dtMinAccelDecel", "Driver.Long.TractionControl", "Driver.Lat.StWhlAngleMax",
+    "Driver.Lat.StWhlAngleVelMax", "Driver.Lat.StWhlAngleAccMax",
+)
 
 
 class ProjectError(Exception):
@@ -100,10 +109,42 @@ class Project:
             d = {k: v for k, v in d.items() if k.startswith(prefix)}
         total = len(d)
         items = dict(list(d.items())[:max_items])
-        return {
+        out = {
             "kind": kind, "name": name, "infofile": True, "total_keys": total,
             "returned": len(items), "values": items,
         }
+        if kind == "testrun":
+            out["driver"] = self.driver(info.to_dict())
+        return out
+
+    def driver(self, testrun: dict[str, str]) -> dict:
+        """The driver a test run uses: its template (or the parametrization saved in the test run),
+        the knowledge it carries and the main limits, read from where they are defined."""
+        template = testrun.get(DRIVER_TEMPLATE) or None
+        out: dict = {
+            "template": template,
+            "knowledge_template": testrun.get("Vehicle.KnowledgeTemplate.Name") or None,
+            "knowledge_vehicle": testrun.get("Driver.Knowl.0.Vehicle"),
+            "knowledge_testrun": testrun.get("Driver.Knowl.0.VehicleLimits.Testrun"),
+        }
+        source = testrun
+        if template and template != "TestRun":
+            out["defined_in"] = None
+            for name in ("Template/" + template, template):
+                try:
+                    p = self.path("driver", name)
+                except (ProjectError, GuardError):
+                    continue
+                if p.is_file():
+                    source, out["defined_in"] = InfoFile.load(p).to_dict(), f"driver {name}"
+                    break
+            if out["defined_in"] is None:
+                out["note"] = f"no driver template {template!r} in Data/Driver/Template"
+                source = {}
+        else:
+            out["defined_in"] = "this test run"
+        out["values"] = {k: source[k] for k in DRIVER_KEYS if k in source}
+        return {k: v for k, v in out.items() if v is not None or k == "defined_in"}
 
     # ---- editing -----------------------------------------------------------
     def edit(self, kind: str, name: str, overrides: dict[str, str | None]) -> dict:
@@ -134,7 +175,19 @@ class Project:
         rel = self.guard.relative(p)
         for c in changes:
             self.store.log("file_key", rel, key=c["key"], old=c["old"], new=c["new"])
-        out = {"changed": True, "file": rel, "changes": changes}
+        out: dict[str, Any] = {"changed": True, "file": rel, "changes": changes}
+        changed = {c["key"] for c in changes}
+        if kind == "testrun" and changed & {"Vehicle", DRIVER_TEMPLATE}:
+            out["driver"] = self.driver(info.to_dict())
+            if "Vehicle" in changed:
+                out["driver_note"] = (
+                    "A new vehicle does not bring its own driver: the test run keeps the driver above "
+                    f"and its knowledge. Check them, set {DRIVER_TEMPLATE} to a template from "
+                    "Data/Driver/Template if they belong to another vehicle, and ask the user which "
+                    "template if unclear")
+        if kind == "driver":
+            out["driver_note"] = (f"{rel} is used by every test run that names it: tell the user that this "
+                                  "file changed")
         new = [c["key"] for c in changes if c["old"] is None]
         if new:
             out["new_keys"] = new
@@ -172,7 +225,16 @@ class Project:
         self.store.record_created(dst)
         rel = self.guard.relative(dst)
         self.store.log("file_create", rel, source=self.guard.relative(src))
-        return {"created": rel, "from": self.guard.relative(src)}
+        out: dict[str, Any] = {"created": rel, "from": self.guard.relative(src)}
+        if kind == "testrun":
+            info = InfoFile.load(dst)
+            if info.is_infofile:
+                out["driver"] = self.driver(info.to_dict())
+                out["driver_note"] = (
+                    "The copy keeps the source's driver (template, or the parametrization saved in the "
+                    "test run) and its knowledge. Before using it with another vehicle, check them and set "
+                    f"{DRIVER_TEMPLATE}; ask the user which template if unclear")
+        return out
 
 
 def _fmt(v) -> str:

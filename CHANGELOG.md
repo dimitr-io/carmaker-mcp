@@ -6,6 +6,20 @@ parameters may still change between minor versions.
 
 ## [Unreleased]
 
+### Added
+- `cm_read` of a test run returns `driver`: its driver template (`Vehicle.DriverTemplate.FName`, or
+  `TestRun` for the one saved in the test run), the vehicle and test run its knowledge was learnt on, and
+  the main limits read from where they are defined. `cm_clone` of a test run and a `cm_edit` that changes
+  `Vehicle` or the template return it too, with a note that a new vehicle does not bring its own driver.
+  Editing a driver template notes that other test runs share the file.
+- The server instructions and the guide say that the test run chooses the driver, that driver parameters
+  are changed in the template, and that steering from input from file arrives about 0.14 s late.
+
+### Changed
+- The guide no longer says that driver templates do not affect a test run, nor advises sweeping
+  `Driver.Acc.ayMax` as study keys: a test run that names a template uses it, and whether such keys take
+  effect then is not established.
+
 ## [0.2.2] - 2026-10-15
 
 ### Added

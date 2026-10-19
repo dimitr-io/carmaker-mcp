@@ -12,8 +12,14 @@ INSTRUCTIONS = (
     "Edits (cm_edit, cm_set_workspace_var, cm_model_set) change real project files and the live model: "
     "each is backed up and logged, and cm_revert_all undoes this session's changes. "
     "The simulation must be idle for loads, edits and reverts. "
-    "Lap times depend on the driver's own limits (test-run keys Driver.Acc.*): before comparing vehicle "
-    "variants on time, find each variant's limit with a study (resource carmaker://guide, 'Drive at the limit')."
+    "The test run, not the vehicle, chooses the driver: Vehicle.DriverTemplate.FName names a template in "
+    "Data/Driver/Template (or 'TestRun' for the one saved in the test run), and the driver's knowledge is "
+    "learnt for one vehicle. Changing Vehicle or cloning another vehicle's test run keeps the old driver: "
+    "check `driver` in the answer of cm_read, cm_edit or cm_clone, and ask the user which template if "
+    "unclear. Driver parameters (Driver.Acc.*, dtAccBrake, StWhlAngle*) are changed in the template file "
+    "(cm_edit kind 'driver'), which other test runs share: tell the user which file changed. Lap times "
+    "depend on the driver's limit Driver.Acc.ayMax: compare vehicle variants each at its own limit. "
+    "More in the resource carmaker://guide."
 )
 
 GUIDE = """\
@@ -68,25 +74,27 @@ test-run keys in memory, no file is edited. Close with `cm_standalone_close`.
   an infofile, or `cm_create(kind, name, content)` to write any text file. Do not write project files with a
   shell: the server then knows nothing of them and cannot take them back.
 
-## Drive at the limit (IPGDriver)
-IPGDriver drives each corner only as fast as its own limits allow, not as fast as the car could:
-`Driver.Acc.ayMax` (lateral, m/s^2), `Driver.Acc.axMax` and `Driver.Acc.axMin` (longitudinal), scaled by
-`Driver.Acc.Factor.Lateral`, `.Accel` and `.Decel`. They are keys of the test run:
-`cm_read("testrun", name, prefix="Driver.Acc")`. Files in Data/Driver are templates that the GUI copies into a
-test run; editing one changes no test run.
-* A run whose largest `Car.ay` is close to `Driver.Acc.ayMax` was limited by the driver, not by the car.
-  Two vehicle variants (a controller on and off, for example) then drive nearly the same speeds, and their
-  times say little about the vehicles.
-* To compare at the limit, find each variant's own best value: one `cm_study_start` with a variation per
-  value, for example `{'label': 'on 15.5', 'keys': {'Driver.Acc.ayMax': 15.5}, 'workspace': {...}}` over a
-  range around the current value in steps of 0.5, and quantities `Car.ay`, `Car.v`, `DM.Steer.Ang`.
-  Study keys change nothing on disk. Refine with smaller steps around the best value.
-* Judge a run by the time it needs for the course (`sim_time_s`, when the test run ends at the end of its
-  course) and only among runs that ended `completed`. A limit that is too high shows as a longer time, a run
-  that does not complete, or steering at its stop; look at a picture of the run (IPGMovie) when in doubt.
-  Report the value each variant was compared at.
-* `DM.Lap.Time` and `DM.Lap.No` hold lap times only when the course is driven as laps: check them before
-  relying on them.
+## The driver (IPGDriver)
+The test run chooses its driver, not the vehicle: `Vehicle.DriverTemplate.FName` names a template in
+Data/Driver/Template, or is `TestRun` for the parametrization saved in the test run itself;
+`Vehicle.KnowledgeTemplate.Name` and `Driver.Knowl.0.*` hold what the driver learnt, and for which vehicle.
+`cm_read` of a test run returns this as `driver`, with the main limits read from where they are defined.
+* Changing `Vehicle`, or `cm_clone` of another vehicle's test run, keeps the old driver and its knowledge.
+  Check `driver` and set `Vehicle.DriverTemplate.FName` (`cm_edit`); ask the user which template if unclear.
+* Driver parameters (`Driver.Acc.axMax/axMin/ayMax`, `Driver.Long.dtAccBrake`, `Driver.Vel.dtMinAccelDecel`,
+  `Driver.Long.TractionControl`, `Driver.Lat.StWhlAngle*`) belong in the template:
+  `cm_edit("driver", "Template/<name>", ...)`. A template is shared by every test run that names it:
+  tell the user which file changed. Whether the same keys set on a test run or as study `keys` take effect
+  when a template is named is not established; do not rely on it, and do not claim they cannot work.
+* IPGDriver corners only as fast as `Driver.Acc.ayMax` allows, not as fast as the car could: a run whose
+  largest `Car.ay` is close to it was limited by the driver. To compare vehicle variants on time, give each
+  its own limit (a template per variant, or a value the user agrees to), judge only runs that ended
+  `completed` by the time for the course, and report the limits used. `DM.Lap.Time` holds lap times only
+  when the course is driven as laps.
+* Replays from input from file: the steering angle reaches `DM.Steer.Ang` about 0.14 s late (a pure delay,
+  not changed by the driver's steering limits), the `Velocity` channel without delay. Advance the steering
+  in the file by that time when comparing yaw response with measurements. In such a replay
+  `dtAccBrake` and `dtMinAccelDecel` did not change the result.
 
 ## When something goes wrong
 * `cm_log(level="error")`: CarMaker's session log. `cm_popups`: what the GUI asked or reported.

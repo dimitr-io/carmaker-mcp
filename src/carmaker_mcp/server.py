@@ -504,7 +504,8 @@ def cm_read(
     prefix: Annotated[str | None, Field(description="Only keys starting with this, e.g. 'Vehicle' or "
                                                     "'DrivMan.'")] = None,
 ) -> dict:
-    """Key / value pairs of a CarMaker infofile. Large files are truncated: filter by keys or prefix."""
+    """Key / value pairs of a CarMaker infofile. Large files are truncated: filter by keys or prefix.
+    For a test run also `driver`: its driver template (or 'TestRun'), knowledge and main limits."""
     return S().project.read(kind, name, keys, prefix)
 
 
@@ -516,7 +517,9 @@ def cm_edit(
                                                            "'SKIDPAD.rd5'}; a null value removes the key")],
 ) -> dict:
     """Change keys in a project file in place (backed up first, logged; only the edited lines change).
-    Requires an idle simulation; load the test run again afterwards."""
+    Requires an idle simulation; load the test run again afterwards. A test run's driver is set with
+    'Vehicle.DriverTemplate.FName'; driver parameters are edited in the template (kind 'driver', name
+    'Template/<name>'), a file other test runs share: tell the user which one changed."""
     return S().edit_file(kind, name, overrides)
 
 
@@ -526,7 +529,9 @@ def cm_clone(
     base: Annotated[str, Field(description="Existing file to copy")],
     new_name: Annotated[str, Field(description="Name of the copy (must not exist)")],
 ) -> dict:
-    """Copy a project file to a new name in the same kind's folder. Never overwrites."""
+    """Copy a project file to a new name in the same kind's folder. Never overwrites. A copied test run
+    keeps the source's driver and its knowledge (see `driver` in the answer): check them before using
+    it with another vehicle."""
     return S().clone_file(kind, base, new_name)
 
 
@@ -777,10 +782,10 @@ def cm_study_start(
     """Run one test run several times with different parameter values, one after another, in the
     background. Returns a study id at once; wait with cm_study_wait. Nothing is written to project files.
     The answer names values that will change nothing: keys_not_found, workspace_not_found and
-    workspace_overruled (the model has the variable in its own workspace: use scope=<model>). IPGDriver
-    corners only as fast as its limit Driver.Acc.ayMax allows (a test-run key): to compare variants on
-    time, sweep it for each variant (keys {'Driver.Acc.ayMax': v}, steps of 0.5 around the current value)
-    and compare each variant's fastest completed run."""
+    workspace_overruled (the model has the variable in its own workspace: use scope=<model>). Driver
+    parameters (Driver.*) in 'keys' may not take effect when the test run names a driver template:
+    change the template instead (cm_edit kind 'driver'). IPGDriver corners only as fast as
+    Driver.Acc.ayMax allows: compare variants on time each at its own limit."""
     return ST().start(testrun, variations, quantities, mode, scope, max_run_s, save_logs)
 
 
