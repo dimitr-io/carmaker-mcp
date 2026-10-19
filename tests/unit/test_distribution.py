@@ -39,7 +39,7 @@ def test_server_json_matches_the_package():
     # the registry verifies ownership of the PyPI package through this marker in its README
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert f"<!-- mcp-name: {sj['name']} -->" in readme
-    assert sj["name"].lower() == "io.github.de-ioannidis/carmaker-mcp"
+    assert sj["name"].lower() == "io.github.dimitr-io/carmaker-mcp"
     assert {v["name"] for v in pkg["environmentVariables"]} <= source_env_vars()
 
 
