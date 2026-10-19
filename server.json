@@ -1,10 +1,10 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.De-Ioannidis/carmaker-mcp",
+  "name": "io.github.dimitr-io/carmaker-mcp",
   "title": "CarMaker",
   "description": "Drive IPG CarMaker for Simulink: run test runs, read results, edit vehicle data and parameters.",
   "repository": {
-    "url": "https://github.com/De-Ioannidis/carmaker-mcp",
+    "url": "https://github.com/dimitr-io/carmaker-mcp",
     "source": "github"
   },
   "version": "0.2.2",

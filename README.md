@@ -1,6 +1,6 @@
 # carmaker-mcp
 
-<!-- mcp-name: io.github.De-Ioannidis/carmaker-mcp -->
+<!-- mcp-name: io.github.dimitr-io/carmaker-mcp -->
 
 An [MCP](https://modelcontextprotocol.io) server that lets an AI agent drive **IPG CarMaker** on your
 computer: start a session, run test runs, read the results, change vehicle data and Simulink controller
@@ -10,7 +10,7 @@ parameters, and undo what it changed.
 > own CarMaker and MATLAB/Simulink licences. This repository contains no IPG or MathWorks code or data.
 
 **Status: alpha.** Developed and tested on one setup (CarMaker 14.1.1, MATLAB R2024b, Windows 11).
-[docs/verification.md](https://github.com/De-Ioannidis/carmaker-mcp/blob/main/docs/verification.md) lists
+[docs/verification.md](https://github.com/dimitr-io/carmaker-mcp/blob/main/docs/verification.md) lists
 what has been checked against real software and what has not.
 
 **Contents:** [What it does](#what-it-does) · [What it does not cover](#what-it-does-not-cover) ·
@@ -37,7 +37,7 @@ It works in two ways, and the agent picks the one that fits the vehicle:
 | Needs | MATLAB with your model, and the CarMaker GUI (the server can start both) | only CarMaker; no MATLAB, no window |
 
 More worked examples:
-[docs/examples.md](https://github.com/De-Ioannidis/carmaker-mcp/blob/main/docs/examples.md).
+[docs/examples.md](https://github.com/dimitr-io/carmaker-mcp/blob/main/docs/examples.md).
 
 ## What it does not cover
 
@@ -71,7 +71,7 @@ outside what this server does or has been tried with.
   so far used vehicle-dynamics runs without them.
 
 The state of each tool is in
-[docs/verification.md](https://github.com/De-Ioannidis/carmaker-mcp/blob/main/docs/verification.md). Reports
+[docs/verification.md](https://github.com/dimitr-io/carmaker-mcp/blob/main/docs/verification.md). Reports
 from other setups are welcome.
 
 ## Requirements
@@ -81,7 +81,7 @@ from other setups are welcome.
 * For the MATLAB-connected session: CarMaker for Simulink and MATLAB R2022b or newer, as far as your CarMaker
   supports it (see the table in [step 1](#1-check-your-machine); only R2024b has been tested)
 * [uv](https://docs.astral.sh/uv/) (it fetches the server and its Python environment; pip also works, see
-  [docs/setup.md](https://github.com/De-Ioannidis/carmaker-mcp/blob/main/docs/setup.md))
+  [docs/setup.md](https://github.com/dimitr-io/carmaker-mcp/blob/main/docs/setup.md))
 * An MCP client: Claude Code, Claude Desktop, VS Code with GitHub Copilot, Codex, Antigravity, Cursor, ...
 
 ## Setup
@@ -164,7 +164,7 @@ it again (`claude mcp remove carmaker`). `claude mcp list` shows whether the ser
 <summary><b>Claude Desktop</b></summary>
 
 **One-click bundle.** Download the `.mcpb` file for your MATLAB release from the
-[latest release](https://github.com/De-Ioannidis/carmaker-mcp/releases/latest) (the table in step 1 names them) and drag
+[latest release](https://github.com/dimitr-io/carmaker-mcp/releases/latest) (the table in step 1 names them) and drag
 it into **Settings > Extensions**. Fill in the project folder, the model and, if your project has one, its
 MATLAB setup script in the dialog; **Configure** changes them later. The bundle holds the server but not its
 Python environment: Claude Desktop builds that with `uv` on first use, so `uv` must be installed.
@@ -355,7 +355,7 @@ All settings are environment variables in the client entry, set like `CM_PROJECT
 
 Each tool tells the client whether it is read-only, changes state, or is destructive, so that clients can ask
 for confirmation where it matters. Every parameter is described in
-[docs/tools.md](https://github.com/De-Ioannidis/carmaker-mcp/blob/main/docs/tools.md).
+[docs/tools.md](https://github.com/dimitr-io/carmaker-mcp/blob/main/docs/tools.md).
 
 **Session and runs**
 
@@ -434,7 +434,7 @@ Runs write result and log files into the project's `SimOutput` folder; a revert 
 
 The server collects no telemetry and makes no network connections of its own. It only talks to MATLAB and
 CarMaker on your machine. Details:
-[docs/safety.md](https://github.com/De-Ioannidis/carmaker-mcp/blob/main/docs/safety.md).
+[docs/safety.md](https://github.com/dimitr-io/carmaker-mcp/blob/main/docs/safety.md).
 
 ## Troubleshooting
 
@@ -449,7 +449,7 @@ Run `uvx carmaker-mcp doctor` first: it names most setup problems together with 
 | "too many licenses in use" on a standalone run | An open MATLAB with CarMaker for Simulink holds the licence. Close that model or MATLAB |
 | The wait tool returns `finished: false` | Not an error: waits are limited to 45 s per call and are simply repeated |
 
-More: [docs/troubleshooting.md](https://github.com/De-Ioannidis/carmaker-mcp/blob/main/docs/troubleshooting.md).
+More: [docs/troubleshooting.md](https://github.com/dimitr-io/carmaker-mcp/blob/main/docs/troubleshooting.md).
 The server's own log is `server.log` in the state folder.
 
 ## How it works
@@ -466,14 +466,14 @@ Nothing of IPG's or MathWorks' is bundled or redistributed.
 
 ## Documentation and contributing
 
-* [Setup in detail](https://github.com/De-Ioannidis/carmaker-mcp/blob/main/docs/setup.md) (pip, updating,
+* [Setup in detail](https://github.com/dimitr-io/carmaker-mcp/blob/main/docs/setup.md) (pip, updating,
   the single-file executable)
-* [Example sessions](https://github.com/De-Ioannidis/carmaker-mcp/blob/main/docs/examples.md)
-* [Tools reference](https://github.com/De-Ioannidis/carmaker-mcp/blob/main/docs/tools.md)
-* [What is verified](https://github.com/De-Ioannidis/carmaker-mcp/blob/main/docs/verification.md)
-* [Contributing](https://github.com/De-Ioannidis/carmaker-mcp/blob/main/CONTRIBUTING.md): test reports from
+* [Example sessions](https://github.com/dimitr-io/carmaker-mcp/blob/main/docs/examples.md)
+* [Tools reference](https://github.com/dimitr-io/carmaker-mcp/blob/main/docs/tools.md)
+* [What is verified](https://github.com/dimitr-io/carmaker-mcp/blob/main/docs/verification.md)
+* [Contributing](https://github.com/dimitr-io/carmaker-mcp/blob/main/CONTRIBUTING.md): test reports from
   other CarMaker and MATLAB versions are especially welcome
-* [Security policy](https://github.com/De-Ioannidis/carmaker-mcp/blob/main/SECURITY.md)
+* [Security policy](https://github.com/dimitr-io/carmaker-mcp/blob/main/SECURITY.md)
 
 Related work: [pycarmaker](https://github.com/gmnvh/pycarmaker) talks to the command port of a standalone
 CarMaker program. This project also covers CarMaker for Simulink, uses IPG's own interfaces, and shares no
@@ -481,4 +481,4 @@ code with it.
 
 ## Licence
 
-MIT, see [LICENSE](https://github.com/De-Ioannidis/carmaker-mcp/blob/main/LICENSE).
+MIT, see [LICENSE](https://github.com/dimitr-io/carmaker-mcp/blob/main/LICENSE).

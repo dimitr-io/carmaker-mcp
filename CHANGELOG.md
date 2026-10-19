@@ -6,6 +6,8 @@ parameters may still change between minor versions.
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-10-19
+
 ### Added
 - `cm_read` of a test run returns `driver`: its driver template (`Vehicle.DriverTemplate.FName`, or
   `TestRun` for the one saved in the test run), the vehicle and test run its knowledge was learnt on, and
@@ -13,8 +15,8 @@ parameters may still change between minor versions.
   `Vehicle` or the template return it too, with a note that a new vehicle does not bring its own driver.
   Editing a driver template notes that other test runs share the file.
 - The server instructions and the guide say that the test run chooses the driver, that driver parameters
-  are changed in the template, and that steering from input from file arrives about 0.14 s late.
-
+  are changed in the template, that IPGDriver corners only as fast as `Driver.Acc.ayMax` allows (compare
+  vehicle variants each at its own limit), and that steering from input from file arrives about 0.14 s late.
 - `cm_wait_end` and each study row return `log_warnings`: the run's new WARNING lines of the session log,
   repeated ones collapsed (at most five). The server instructions say that a completed run does not prove
   every setting was applied.
@@ -26,16 +28,8 @@ parameters may still change between minor versions.
   answers.
 
 ### Changed
-- The guide no longer says that driver templates do not affect a test run, nor advises sweeping
-  `Driver.Acc.ayMax` as study keys: a test run that names a template uses it, and whether such keys take
-  effect then is not established.
-
-## [0.2.2] - 2026-10-15
-
-### Added
-- The server instructions, the guide and `cm_study_start` tell an agent that IPGDriver corners only as
-  fast as its own limit `Driver.Acc.ayMax` allows, and how to find each vehicle variant's limit with a study
-  before comparing times. Before, an agent compared variants at one fixed driver limit.
+- The registry name is now `io.github.dimitr-io/carmaker-mcp`, after the GitHub account was renamed.
+  Versions up to 0.2.1 stay listed under `io.github.De-Ioannidis/carmaker-mcp`.
 
 ## [0.2.1] - 2026-10-15
 

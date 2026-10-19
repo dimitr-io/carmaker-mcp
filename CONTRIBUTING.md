@@ -5,7 +5,7 @@ Bug reports, test results on other CarMaker / MATLAB versions and pull requests 
 ## Development setup
 
 ```bash
-git clone https://github.com/De-Ioannidis/carmaker-mcp
+git clone https://github.com/dimitr-io/carmaker-mcp
 cd carmaker-mcp
 uv sync --extra dev                 # or: python -m venv .venv && .venv\Scripts\pip install -e ".[dev]"
 uv run pytest                       # unit tests: no CarMaker, no MATLAB needed

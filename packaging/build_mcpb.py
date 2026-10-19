@@ -24,7 +24,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "src" / "carmaker_mcp"
-REPO = "https://github.com/De-Ioannidis/carmaker-mcp"
+REPO = "https://github.com/dimitr-io/carmaker-mcp"
 
 ENTRY = '''"""Entry point of the bundle (the carmaker_mcp package lies next to this file)."""
 
@@ -131,7 +131,7 @@ def manifest(ver: str, python: str, matlab: str | None, tools: list[dict]) -> di
             "community project, not affiliated with IPG Automotive or MathWorks. The server edits real "
             f"project files in place: read {REPO}/blob/main/docs/safety.md first."
         ),
-        "author": {"name": "Dimitrios Ioannidis", "url": "https://github.com/De-Ioannidis"},
+        "author": {"name": "Dimitrios Ioannidis", "url": "https://github.com/dimitr-io"},
         "repository": {"type": "git", "url": REPO},
         "homepage": REPO,
         "documentation": f"{REPO}/blob/main/docs/setup.md",
