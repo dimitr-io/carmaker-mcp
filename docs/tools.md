@@ -534,7 +534,7 @@ Disconnect; for instances this server launched, also stop the CarMaker process.
 
 *Start a parameter study* · changes state
 
-Run one test run several times with different parameter values, one after another, in the background. Returns a study id at once; wait with cm_study_wait. Nothing is written to project files. The answer names values that will change nothing: keys_not_found, workspace_not_found and workspace_overruled (the model has the variable in its own workspace: use scope=<model>). Driver parameters (Driver.*) in 'keys' may not take effect when the test run names a driver template: change the template instead (cm_edit kind 'driver'). IPGDriver corners only as fast as Driver.Acc.ayMax allows: compare variants on time each at its own limit.
+Run one test run several times with different parameter values, one after another, in the background. Returns a study id at once; wait with cm_study_wait. Nothing is written to project files. The answer names values that will change nothing: keys_not_found, workspace_not_found and workspace_overruled (the model has the variable in its own workspace: use scope=<model>). Driver.* in 'keys' may not take effect when the test run names a driver template: edit the template.
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
