@@ -21,6 +21,9 @@ INSTRUCTIONS = (
     "unclear. Driver parameters (Driver.Acc.*, dtAccBrake, StWhlAngle*) are changed in the template file "
     "(cm_edit kind 'driver'), which other test runs share: tell the user which file changed. Lap times "
     "depend on the driver's limit Driver.Acc.ayMax: compare vehicle variants each at its own limit. "
+    "Driver.Acc.GGExp (rows 'vel_kmh exp_acc exp_dec') shapes how much lateral and longitudinal "
+    "acceleration the driver combines; for a car with aero downforce, exponents rising with speed (e.g. "
+    "10 1.5 1.5 / 30 2 2 / 60 3 3 / 90 5 5) are often right, a flat table holds it back at speed. "
     "More in the resource carmaker://guide. "
     "A run that ends 'completed' does not prove every setting was applied: CarMaker reports ignored or "
     "unsupported parameters only as WARNING lines in the session log (log_warnings of cm_wait_end and of "
@@ -97,6 +100,14 @@ Data/Driver/Template, or is `TestRun` for the parametrization saved in the test 
   its own limit (a template per variant, or a value the user agrees to), judge only runs that ended
   `completed` by the time for the course, and report the limits used. `DM.Lap.Time` holds lap times only
   when the course is driven as laps.
+* `Driver.Acc.GGExp` is a table, one row per speed: `vel_kmh exp_acc exp_dec`, the exponents of the
+  driver's g-g diagram when accelerating and braking. 1 is an ellipse (lateral and longitudinal
+  acceleration traded against each other); larger values let the driver combine more of both, which is
+  faster up to the point where the car leaves the course or spins. A car with aerodynamic downforce has
+  more grip at speed, so exponents that rise with speed often suit it, for example
+  `10 1.5 1.5` / `30 2 2` / `60 3 3` / `90 5 5`. A flat table holds such a car back at high speed. The
+  speed-dependent limits `Driver.Acc.VelDepend` (used with `Driver.Acc.UseVelDepend = 1`) serve the same
+  purpose for `ayMax` and `axMax`. If a run leaves the course, lower the exponents a little.
 * Replays from input from file: the steering angle reaches `DM.Steer.Ang` about 0.14 s late (a pure delay,
   not changed by the driver's steering limits), the `Velocity` channel without delay. Advance the steering
   in the file by that time when comparing yaw response with measurements. In such a replay

@@ -9,6 +9,9 @@ parameters may still change between minor versions.
 ## [0.2.3] - unreleased (local build)
 
 ### Changed
+- The server instructions and the guide explain the driver's g-g exponents (`Driver.Acc.GGExp`, rows
+  `vel_kmh exp_acc exp_dec`) and that exponents rising with speed often suit a car with aerodynamic
+  downforce.
 - Every run goes at CarMaker's maximum speed. Before each start in the MATLAB session the server selects
   the GUI's speed "max" (`SetSimTimeAcc 999999`). Standalone runs and studies use the largest speed IPG's
   Python API accepts (327 x real time; 1000 overflows it, 0 pauses the run); before, they ran in real
