@@ -76,6 +76,28 @@ async def _maybe(x):
     return await x if inspect.isawaitable(x) else x
 
 
+def _alive(pid: int) -> bool:
+    """Whether a process with this id is running."""
+    if sys.platform != "win32":
+        try:
+            os.kill(int(pid), 0)
+        except OSError:
+            return False
+        return True
+    import ctypes
+
+    kernel32 = ctypes.windll.kernel32
+    handle = kernel32.OpenProcess(0x1000, False, int(pid))  # PROCESS_QUERY_LIMITED_INFORMATION
+    if not handle:
+        return False
+    try:
+        code = ctypes.c_ulong()
+        still_active = 259
+        return bool(kernel32.GetExitCodeProcess(handle, ctypes.byref(code))) and code.value == still_active
+    finally:
+        kernel32.CloseHandle(handle)
+
+
 def _launch_failure(error: Exception, log_lines: list[str]) -> str:
     """Why a launched CarMaker program could not be used, from its own log if it wrote one."""
     errs = [" ".join(ln.split()) for ln in sessionlog.filter_level(log_lines, "error")]
@@ -110,6 +132,7 @@ class Instance:
     stop_after_s: float | None = None
     finished: Any = None  # asyncio.Event set by the watcher
     stop_reason: str | None = None
+    movie: Any = None  # IPGMovie showing this program, if one was started for it
 
 
 class StandaloneManager:
@@ -189,6 +212,7 @@ class StandaloneManager:
         self, testrun: str, project: str | Path | None = None, executable: str | Path | None = None,
         overrides: dict[str, Any] | None = None, quantities: list[str] | None = None,
         realtime_factor: float = 1.0, stop_after_s: float | None = 600.0, start: bool = True,
+        movie: bool = False,
     ) -> dict:
         proj = self._project_path(project)
         exe = Path(executable) if executable else self.cm_home / "bin" / "CarMaker.win64.exe"
@@ -226,15 +250,28 @@ class StandaloneManager:
                             stop_after_s=stop_after_s, finished=asyncio.Event())
             self.instances[iid] = inst
             self._watch(inst)
+            if movie:
+                await self._open_movie(inst)
             if start:
                 await sc.start_sim()
                 self._arm_stop(inst)
             return inst
 
         inst = self._call(go, 120)
-        return {"instance": inst.id, "pid": inst.pid, "testrun": testrun, "project": str(proj),
-                "executable": str(exe), "started": start, "stop_after_s": stop_after_s,
-                "overrides_in_memory": overrides or {}}
+        out = {"instance": inst.id, "pid": inst.pid, "testrun": testrun, "project": str(proj),
+               "executable": str(exe), "started": start, "stop_after_s": stop_after_s,
+               "overrides_in_memory": overrides or {}}
+        if inst.movie is not None:
+            out["movie_pid"] = inst.movie.get_pid()
+        return out
+
+    async def _open_movie(self, inst: Instance) -> None:
+        """IPGMovie connected to this program: a window that shows the run as it happens (the
+        program itself has none). It closes with the program."""
+        mv = self._cmapi.Application.create(self._cmapi.AppType.IPGMovie)
+        mv.attach_to_cm(inst.master)
+        await _maybe(mv.start())
+        inst.movie = mv
 
     def attach(self, pid: int, testrun: str | None = None, project: str | Path | None = None,
                overrides: dict[str, Any] | None = None, quantities: list[str] | None = None,
@@ -401,14 +438,34 @@ class StandaloneManager:
         inst = self._inst(instance)
 
         async def go():
+            if inst.movie is not None:
+                try:
+                    await asyncio.wait_for(_maybe(inst.movie.stop()), 10)
+                except Exception:
+                    pass
+            out = {"instance": inst.id, "closed": True, "process_stopped": inst.kind == "launched"}
             try:
                 if inst.kind == "launched":
-                    await inst.sc.stop_and_disconnect()
+                    await asyncio.wait_for(_maybe(inst.sc.stop_and_disconnect()), 30)
                 else:
                     await inst.sc.disconnect()
+            except Exception as e:
+                out["close_error"] = f"{type(e).__name__}: {e}"
             finally:
                 self.instances.pop(inst.id, None)
-            return {"instance": inst.id, "closed": True, "process_stopped": inst.kind == "launched"}
+            if inst.kind == "launched" and inst.pid:
+                # Found live: after a run that stopped with an error at its start the program stayed
+                # and kept its licence. A program this server started does not outlive its instance.
+                t0 = time.time()
+                while _alive(inst.pid) and time.time() - t0 < 5:
+                    await asyncio.sleep(0.5)
+                if _alive(inst.pid):
+                    try:
+                        os.kill(int(inst.pid), signal.SIGTERM)
+                        out["process_killed"] = True
+                    except (OSError, ValueError):
+                        pass
+            return out
 
         return self._call(go, 60)
 

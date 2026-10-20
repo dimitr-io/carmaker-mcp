@@ -209,7 +209,15 @@ class Cm4slBackend:
     def gui_tcl(self, command: str, timeout_ms: int = 10000) -> tuple[int, str]:
         """Returns (status, result). status 0 = ok, -1 Tcl error, -2 no connection, -3 timeout."""
         wait = max(self.timeout, timeout_ms / 1000 + 5) if timeout_ms > 0 else self.timeout
-        res = self._call("cmguicmd", command, float(timeout_ms), nargout=2, timeout=wait)
+        try:
+            res = self._call("cmguicmd", command, float(timeout_ms), nargout=2, timeout=wait)
+        except BackendError as e:
+            if "Unknown exception" not in str(e):
+                raise
+            raise BackendError(
+                f"{e}: MATLAB has no CarMaker GUI to talk to (it was closed, or never started from this "
+                "MATLAB). cm_session_start brings it up. Standalone runs (cm_standalone_*) have no GUI: "
+                "cm_standalone_launch(movie=true) shows them in IPGMovie") from e
         result, status = res
         return int(status), str(result)
 

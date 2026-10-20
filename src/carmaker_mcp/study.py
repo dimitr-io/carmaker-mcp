@@ -76,9 +76,12 @@ class StudyRunner:
     # ---- public --------------------------------------------------------------------
     def start(self, testrun: str, variations: list[dict[str, Any]], quantities: list[str] | None = None,
               mode: str = "cm4sl", scope: str = "base", max_run_s: float = 900.0,
-              save_logs: bool = False) -> dict:
+              save_logs: bool = False, movie: bool = False) -> dict:
         if mode not in ("cm4sl", "standalone"):
             raise BackendError("mode must be 'cm4sl' or 'standalone'")
+        if movie and mode != "standalone":
+            raise BackendError("movie is for mode 'standalone'; in the MATLAB session open IPGMovie with "
+                               "cm_movie_open before the study")
         if save_logs and mode != "cm4sl":
             raise BackendError("save_logs needs the MATLAB-connected session (mode 'cm4sl')")
         runs = check_variations(variations, mode)
@@ -97,7 +100,7 @@ class StudyRunner:
             st = {
                 "id": sid, "state": "running", "testrun": testrun, "mode": mode, "scope": scope,
                 "quantities": list(quantities or DEFAULT_QUANTITIES), "max_run_s": max_run_s,
-                "save_logs": bool(save_logs),
+                "save_logs": bool(save_logs), "movie": bool(movie),
                 "started": time.strftime("%Y-%m-%d %H:%M:%S"), "total": len(runs), "current": 0,
                 "current_label": None, "rows": [], "variations": runs,
             }
@@ -309,7 +312,8 @@ class StudyRunner:
         inst = None
         try:
             store = sorted({"Time", "Car.v", "Car.Distance", *st["quantities"]})
-            inst = sa.launch(st["testrun"], overrides=var["keys"] or None, quantities=store)["instance"]
+            inst = sa.launch(st["testrun"], overrides=var["keys"] or None, quantities=store,
+                             movie=st.get("movie", False))["instance"]
             t0 = time.time()
             while True:
                 end = sa.wait_end(inst, 2)

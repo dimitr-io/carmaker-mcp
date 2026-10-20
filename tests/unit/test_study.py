@@ -16,6 +16,7 @@ class FakeStandalone:
 
     def launch(self, testrun, overrides=None, quantities=None, **kw):
         self.launched.append((testrun, overrides, quantities))
+        self.movie = kw.get("movie")
         return {"instance": f"sa{len(self.launched)}"}
 
     def wait_end(self, instance, timeout_s):
@@ -130,6 +131,11 @@ def test_standalone_study(session, mock):
     assert sa.launched[0][1] == {"Body.mass": 300} and "Car.ax" in sa.launched[0][2]
     assert sa.launched[1][1] is None and sa.closed == ["sa1", "sa2"]
     assert not [c for c in mock.calls if c[0] == "load"]  # the MATLAB session is not touched
+    assert sa.movie is False
+    runner.wait(runner.start("A", [{}], mode="standalone", movie=True)["study"])
+    assert sa.movie is True
+    with pytest.raises(BackendError, match="movie is for mode 'standalone'"):
+        runner.start("A", [{}], movie=True)
 
 
 def test_standalone_study_cancel(session):

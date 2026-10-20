@@ -262,3 +262,21 @@ def test_value_conversion(fake_matlab):
     assert _to_matlab([1, 2]) == [[1.0, 2.0]] and _to_matlab([[1, 2], [3, 4]]) == [[1.0, 2.0], [3.0, 4.0]]
     assert _to_matlab({"k": 1}) == {"k": 1.0}
     assert backend_cm4sl._NOWAIT == 0
+
+
+def test_a_missing_gui_says_what_to_start():
+    """Reported from use: 'MATLAB error in cmguicmd: Unknown exception' and nothing else."""
+    import pytest
+
+    from carmaker_mcp.backend import BackendError
+    from carmaker_mcp.backend_cm4sl import Cm4slBackend
+
+    b = Cm4slBackend.__new__(Cm4slBackend)
+    b.timeout = 5
+
+    def fail(*a, **k):
+        raise BackendError("MATLAB error in cmguicmd: Unknown exception")
+
+    b._call = fail
+    with pytest.raises(BackendError, match="Unknown exception: MATLAB has no CarMaker GUI.*movie=true"):
+        b.gui_tcl("GetSimStatus")

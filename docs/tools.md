@@ -445,6 +445,7 @@ Start a NEW independent CarMaker simulation program (not connected to MATLAB) an
 | `stop_after_s` | number or null | `600.0` | Safety stop at this simulation time in s (null: none) |
 | `executable` | string or null | null | CarMaker executable (default: the stock one of the install) |
 | `start` | boolean | `true` | Start the run at once |
+| `movie` | boolean | `false` | Show the run in IPGMovie (the program has no window; IPGMovie closes with it) |
 
 ### `cm_standalone_attach`
 
@@ -545,6 +546,7 @@ Run one test run several times with different parameter values, one after anothe
 | `scope` | string | `"base"` | 'base' for the MATLAB base workspace, or the name of a loaded Simulink model for that model's workspace |
 | `max_run_s` | number | `900.0` | A run is stopped after this wall time in s |
 | `save_logs` | boolean | `false` | After every run, save what Simulink logged and the workspaces as that run used them to a MAT file next to its result file (mode cm4sl; logs_file per row) |
+| `movie` | boolean | `false` | mode standalone: show each run in IPGMovie |
 
 ### `cm_study_status`
 

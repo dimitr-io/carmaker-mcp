@@ -6,6 +6,18 @@ parameters may still change between minor versions.
 
 ## [Unreleased]
 
+### Added
+- `cm_standalone_launch(movie=true)` and `cm_study_start(mode="standalone", movie=true)` show a standalone
+  run in IPGMovie, connected to that CarMaker program while it runs. A standalone program has no window
+  of its own, so these runs could not be watched before. IPGMovie closes with the program.
+
+### Fixed
+- A standalone program whose run stopped with an error at its start stayed running after
+  `cm_standalone_close` (and after a study row), holding a CarMaker licence. A program the server
+  started is now ended with its instance.
+- `MATLAB error in cmguicmd: Unknown exception` now says that MATLAB has no CarMaker GUI to talk to and
+  what to start (`cm_session_start`, or `movie=true` for standalone runs).
+
 ## [0.2.2] - 2026-10-19
 
 ### Added

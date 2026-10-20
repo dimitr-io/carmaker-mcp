@@ -681,12 +681,14 @@ def cm_standalone_launch(
     executable: Annotated[str | None, Field(description="CarMaker executable (default: the stock one of "
                                                         "the install)")] = None,
     start: Annotated[bool, Field(description="Start the run at once")] = True,
+    movie: Annotated[bool, Field(description="Show the run in IPGMovie (the program has no window; "
+                                             "IPGMovie closes with it)")] = False,
 ) -> dict:
     """Start a NEW independent CarMaker simulation program (not connected to MATLAB) and run a test run
     on it. Only for test runs whose vehicle does not need a Simulink controller. Results go to the
     project's SimOutput; see cm_standalone_results."""
     return SA().launch(testrun, overrides=overrides, quantities=quantities, realtime_factor=realtime_factor,
-                       stop_after_s=stop_after_s, executable=executable, start=start)
+                       stop_after_s=stop_after_s, executable=executable, start=start, movie=movie)
 
 
 @_tool(WRITE, "Attach to a running CarMaker program")
@@ -777,13 +779,14 @@ def cm_study_start(
                                                  "workspaces as that run used them to a MAT file next "
                                                  "to its result file (mode cm4sl; logs_file per "
                                                  "row)")] = False,
+    movie: Annotated[bool, Field(description="mode standalone: show each run in IPGMovie")] = False,
 ) -> dict:
     """Run one test run several times with different parameter values, one after another, in the
     background. Returns a study id at once; wait with cm_study_wait. Nothing is written to project files.
     The answer names values that will change nothing: keys_not_found, workspace_not_found and
     workspace_overruled (the model has the variable in its own workspace: use scope=<model>). Driver.*
     in 'keys' may not take effect when the test run names a driver template: edit the template."""
-    return ST().start(testrun, variations, quantities, mode, scope, max_run_s, save_logs)
+    return ST().start(testrun, variations, quantities, mode, scope, max_run_s, save_logs, movie)
 
 
 @_tool(READ, "Parameter study progress and results")
