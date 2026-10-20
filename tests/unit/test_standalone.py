@@ -122,3 +122,19 @@ def test_servers_reads_cmapi_spec(tmp_path, monkeypatch):
         {"pid": None, "identity": None, "description": None, "appclass": None, "host": None,
          "managed_by_us": False},
     ]
+
+
+def test_a_failed_launch_removes_its_driver_copy(fake, session, project):
+    """Found live: the launch failed (no licence) and the template copy stayed in the project."""
+    tpl = project / "Data" / "Driver" / "Template"
+    tpl.mkdir(parents=True)
+    (tpl / "Base").write_text("#INFOFILE1.1 (UTF-8) - Do not remove this line!\nDriver.Acc.ayMax = 13\n")
+    run = project / "Data" / "TestRun" / "Sub" / "Run1"
+    run.write_text(run.read_text() + "Vehicle.DriverTemplate.FName = Base\n")
+
+    def no_licence(testrun, **kw):
+        raise server.BackendError("too many licenses in use")
+
+    fake.launch = no_licence
+    r = call("cm_standalone_launch", {"testrun": "Sub/Run1", "driver": {"Driver.Acc.ayMax": 12}})
+    assert r.is_error and sorted(p.name for p in tpl.iterdir()) == ["Base"]

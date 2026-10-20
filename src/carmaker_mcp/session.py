@@ -12,7 +12,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import internalerror, lock, outquants
+from . import internalerror, lock, outquants, plot
 from . import log as sessionlog
 from .backend import Backend, BackendError, BackendTimeout, Status, check_tcl_allowed, tcl_word
 from .config import Config
@@ -77,7 +77,8 @@ class Session:
         self._logs_pending = False  # save Simulink's logs when the run in progress has ended
         self._cm4sl_dir: Path | None = None  # MATLAB's working folder when it was last inside the project
         self._folders_fixed: dict[str, Any] = {}  # what the last start put back
-        self._window_capture = capture_window  # (exe name) -> PNG data, width, height
+        self._window_capture = capture_window  # (exe name, pid) -> PNG data, width, height
+        self._plot_pid: int | None = None  # IPGControl window of the last plot
         # Thread of a running parameter study; other threads may not change state meanwhile.
         self.study_owner: int | None = None
         b: Any = backend
@@ -831,6 +832,44 @@ class Session:
             p = self.project.root / p
         return Erg(p)
 
+    def standalone_driver(self, testrun: str, overrides: dict, driver: dict | None) -> tuple[dict, list]:
+        """Driver values for one standalone program: a copy of the test run's driver template (or the
+        values as keys if the driver is the one saved in the test run)."""
+        if not driver:
+            return overrides, []
+        bad = [k for k in driver if not str(k).startswith("Driver.")]
+        if bad:
+            raise BackendError(f"'driver' takes Driver.* keys only, not {bad}")
+        key = "Vehicle.DriverTemplate.FName"
+        read = self.project.read("testrun", testrun, keys=[key])["driver"]
+        template = overrides.get(key) or read.get("template")
+        if template in (None, "", "TestRun"):
+            return {**overrides, **driver}, []
+        name = f".mcp_sa_{time.strftime('%Y%m%d-%H%M%S')}"
+        path = self.project.temp_driver(str(template), driver, name)
+        return {**overrides, "Vehicle.DriverTemplate.FName": name}, [path]
+
+    def results_plot(self, ergs: list[str], quantities: list[str], x: str | None, picture: bool) -> dict:
+        """Show quantities of result files in IPGControl (one window per call; the previous one this
+        session opened is closed) and, with ``picture``, return a picture of it."""
+        files = [self.erg(e).path for e in ergs]  # checks that each is a result file
+        exe = plot.find_ipgcontrol(self.cfg.cm_home or _cm_home_quiet())
+        if self._plot_pid:
+            _end(self._plot_pid)
+        res = plot.open_plot(exe, files, quantities, x, self.cfg.state_dir / "plot")
+        self._plot_pid = res["pid"]
+        if picture:
+            time.sleep(1.5)  # let IPGControl draw
+            try:
+                data, w, h = self._window_capture(plot.EXE, res["pid"])
+                path = self.cfg.state_dir / "plot" / f"plot-{time.strftime('%Y%m%d-%H%M%S')}.png"
+                path.write_bytes(data)
+                res.update(picture=str(path), width=w, height=h)
+            except CaptureError as e:
+                res["picture_error"] = str(e)
+        res["note"] = "The IPGControl window stays open for the user; the next plot replaces it"
+        return res
+
     def results_export(self, erg: str, quantities: list[str] | None, t_min: float | None,
                        t_max: float | None, file: str | None, fmt: str) -> dict:
         e = self.erg(erg)
@@ -1050,3 +1089,23 @@ def _check_var(name: str) -> None:
 def _check_model_path(path: str) -> None:
     if not _MODEL_PATH.match(path) or "\n" in path:
         raise BackendError(f"invalid Simulink path: {path!r}")
+
+
+def _cm_home_quiet():
+    try:
+        from .standalone import find_cm_home
+
+        return find_cm_home(None)
+    except Exception:
+        return None
+
+
+def _end(pid: int) -> None:
+    """End a program this session started (a previous IPGControl window)."""
+    import os
+    import signal
+
+    try:
+        os.kill(int(pid), signal.SIGTERM)
+    except (OSError, ValueError):
+        pass

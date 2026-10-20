@@ -150,6 +150,7 @@ class Instance:
     movie: Any = None  # IPGMovie showing this program, if one was started for it
     project: Path | None = None
     log_mark: Any = None  # session log position at the start of the current run
+    temp_files: list = field(default_factory=list)  # removed when the instance is closed
 
 
 class StandaloneManager:
@@ -229,7 +230,7 @@ class StandaloneManager:
         self, testrun: str, project: str | Path | None = None, executable: str | Path | None = None,
         overrides: dict[str, Any] | None = None, quantities: list[str] | None = None,
         realtime_factor: float | None = None, stop_after_s: float | None = 600.0, start: bool = True,
-        movie: bool = False,
+        movie: bool = False, temp_files: list[Path] | None = None,
     ) -> dict:
         proj = self._project_path(project)
         exe = Path(executable) if executable else self.cm_home / "bin" / "CarMaker.win64.exe"
@@ -258,6 +259,7 @@ class StandaloneManager:
                 raise BackendError(_launch_failure(e, sessionlog.since(proj, mark), own)) from e
             inst = Instance(iid, "launched", sc, master, var, master.get_pid(), testrun,
                             stop_after_s=stop_after_s, finished=asyncio.Event(), project=proj, log_mark=mark)
+            inst.temp_files = list(temp_files or [])
             self.instances[iid] = inst
             self._watch(inst)
             if movie:
@@ -531,6 +533,11 @@ class StandaloneManager:
                 out["close_error"] = f"{type(e).__name__}: {e}"
             finally:
                 self.instances.pop(inst.id, None)
+                for p in inst.temp_files:
+                    try:
+                        Path(p).unlink()
+                    except OSError:
+                        pass
             if inst.kind == "launched" and inst.pid:
                 # Found live: after a run that stopped with an error at its start the program stayed
                 # and kept its licence. A program this server started does not outlive its instance.

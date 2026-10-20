@@ -222,6 +222,19 @@ def test_auto_mode_picks_what_is_ready(session, mock):
     assert runner.start("Sub/Run1", [{}])["mode"] == "cm4sl"
 
 
+def test_rows_say_what_they_used_and_why_they_aborted(session):
+    sa = FakeStandalone()
+    sa.wait_end = lambda inst, t: {"finished": True, "sim_time_s": 10.0, "error_flag": 1,
+                                   "log_errors": ["ERROR Vehicle leaves road"] + [f"ERROR stack {i}" for i in range(9)]}
+    runner = StudyRunner(session, lambda: sa)
+    st = runner.wait(runner.start("A", [{"keys": {"Vehicle": "Car_B"}}], mode="standalone", movie=True,
+                                  keep_open=True)["study"])
+    row = st["rows"][0]
+    assert row["vehicle"] == "Car_B" and row["valid"] is False
+    assert row["abort_reason"] == "ERROR Vehicle leaves road" and len(row["log_errors"]) == 5
+    assert st["kept_open"] == "sa1" and sa.closed == []  # the last run stays in IPGMovie
+
+
 def test_standalone_study_cancel(session):
     sa = FakeStandalone(never_ends=True)
     runner = StudyRunner(session, lambda: sa)

@@ -194,6 +194,19 @@ Time series from a result file, decimated to at most max_points samples.
 | `t_max` | number or null | null | End of the time window in s |
 | `max_points` | integer | `500` | Samples are thinned to at most this many per quantity |
 
+### `cm_results_plot`
+
+*Plot result files in IPGControl* · changes state
+
+Plot quantities of result files in IPGControl, IPG's plotting program; needs no MATLAB. The window stays open for the user (the next plot replaces it) and a picture comes back as an image. This server has no MATLAB evaluation: for MATLAB figures use a MATLAB server, or cm_results_export.
+
+| Parameter | Type | Default | Meaning |
+|---|---|---|---|
+| `ergs` | list of string | required | Result files (.erg), absolute or relative to the project; several are overlaid |
+| `quantities` | list of string | required | Quantities to plot, e.g. ['Car.ay', 'Car.YawRate'] |
+| `x` | string or null | null | Quantity for the x axis (default: Time), e.g. 'Car.Distance' |
+| `picture` | boolean | `true` | Also return a picture of the plot |
+
 ### `cm_results_crossings`
 
 *Times at which a quantity reaches values* · read-only
@@ -475,6 +488,7 @@ Start a NEW independent CarMaker simulation program (not connected to MATLAB) an
 | `start` | boolean | `true` | Start the run at once |
 | `movie` | boolean | `false` | Show the run in IPGMovie (the program has no window; IPGMovie closes with it) |
 | `speed` | number or null | null | x real time; omit for CarMaker's maximum. Slower only if the user asks |
+| `driver` | object or null | null | Driver template values for this program only, in a copy removed when it closes |
 
 ### `cm_standalone_attach`
 
@@ -569,7 +583,7 @@ Run one test run several times with different parameter values, one after anothe
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
 | `testrun` | string | required | Test run relative to Data/TestRun |
-| `variations` | list of object | required | One entry per run: {'label': 'heavy', 'keys': {'Body.mass': 320}, 'workspace': {'Kp_yaw': 1.5}, 'driver': {'Driver.Acc.ayMax': 14}}. 'keys': infofile keys in memory for that run; 'workspace': MATLAB variables in 'scope', restored after the run; 'driver': driver template values, in a copy deleted after the run. All optional |
+| `variations` | list of object | required | One entry per run: {'label': 'heavy', 'keys': {'Body.mass': 320}, 'workspace': {'Kp_yaw': 1.5}, 'driver': {'Driver.Acc.ayMax': 14, 'Driver.Acc.GGExp': '10 1.5 1.5\n90 5 5'}}. 'keys': infofile keys in memory for that run; 'workspace': MATLAB variables in 'scope', restored after the run; 'driver': driver template values, in a copy deleted after the run. All optional |
 | `quantities` | list of string or null | null | Quantities to summarise per run (default: Time, Car.v) |
 | `mode` | `auto` \| `cm4sl` \| `standalone` | `"auto"` | cm4sl: the MATLAB-connected session. standalone: CarMaker without MATLAB (no 'workspace' values). auto: cm4sl if MATLAB is connected |
 | `scope` | string | `"base"` | 'base' for the MATLAB base workspace, or the name of a loaded Simulink model for that model's workspace |
@@ -578,6 +592,7 @@ Run one test run several times with different parameter values, one after anothe
 | `movie` | boolean | `false` | mode standalone: show the runs in IPGMovie |
 | `speed` | number or null | null | x real time; omit for CarMaker's maximum. Slower only if the user asks |
 | `gates` | list of number or null | null | Car.Distance values in m; each row gets 'splits', the times between them |
+| `keep_open` | boolean | `false` | With movie: leave the last run in IPGMovie (close it with cm_standalone_close) |
 
 ### `cm_study_status`
 

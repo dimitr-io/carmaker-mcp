@@ -10,7 +10,7 @@ DEFAULT = {
     "cm_session_start", "cm_doctor",
     "cm_status", "cm_load_testrun", "cm_start_sim", "cm_stop_sim", "cm_wait_end", "cm_log", "cm_live",
     "cm_dva_write", "cm_dva_release", "cm_popups", "cm_popup_timeout",
-    "cm_results_list", "cm_results_summary", "cm_results_read", "cm_results_crossings", "cm_results_export",
+    "cm_results_list", "cm_results_summary", "cm_results_read", "cm_results_crossings", "cm_results_export", "cm_results_plot",
     "cm_list", "cm_read", "cm_edit", "cm_clone",
     "cm_list_workspace_vars", "cm_get_workspace_var", "cm_set_workspace_var",
     "cm_model_get", "cm_model_set", "cm_model_save", "cm_model_logs_save",
@@ -57,7 +57,7 @@ def test_default_and_optional_tools(monkeypatch):
     assert server.features_from_env() == frozenset()
 
     slim = set(tools(server.create_server(disabled={"standalone", "study", "matlab", "movie"})))
-    assert slim == {t for t in DEFAULT if server._group(t) is None} and len(slim) == 28
+    assert slim == {t for t in DEFAULT if server._group(t) is None} and len(slim) == 29
     monkeypatch.setenv("CM_DISABLE", "standalone,what")
     assert server.disabled_from_env() == {"standalone"}
 

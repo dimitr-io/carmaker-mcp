@@ -33,7 +33,9 @@ MAX_CREATE_BYTES = 2_000_000  # of a file written by cm_create
 # What a test run's IPGDriver is: chosen by the test run, not by the vehicle.
 DRIVER_TEMPLATE = "Vehicle.DriverTemplate.FName"  # a file in Data/Driver/Template, or "TestRun"
 DRIVER_KEYS = (
-    "Driver.Acc.axMax", "Driver.Acc.axMin", "Driver.Acc.ayMax", "Driver.Long.dtAccBrake",
+    "Driver.Acc.axMax", "Driver.Acc.axMin", "Driver.Acc.ayMax", "Driver.Acc.GGExp",
+    "Driver.Acc.Factor.Lateral", "Driver.Acc.Factor.Accel", "Driver.Acc.Factor.Decel",
+    "Driver.Acc.UseVelDepend", "Driver.Long.dtAccBrake",
     "Driver.Vel.dtMinAccelDecel", "Driver.Long.TractionControl", "Driver.Lat.StWhlAngleMax",
     "Driver.Lat.StWhlAngleVelMax", "Driver.Lat.StWhlAngleAccMax",
 )

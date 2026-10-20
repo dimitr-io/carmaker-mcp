@@ -86,16 +86,19 @@ if sys.platform == "win32":
         finally:
             _kernel32.CloseHandle(handle)
 
-    def _main_window(exe_name: str) -> int:
-        """The largest visible top-level window of a program, by the name of its executable."""
+    def _main_window(exe_name: str, pid: int | None = None) -> int:
+        """The largest visible top-level window of a program, by the name of its executable (and,
+        with ``pid``, of that process only)."""
         found: list[tuple[int, int]] = []
+        want = pid
 
         @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
         def each(hwnd, _):
             if _user32.IsWindowVisible(hwnd):
                 pid = wintypes.DWORD()
                 _user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-                if Path(_exe_of(pid.value)).name.lower() == exe_name.lower():
+                same = want is None or pid.value == want
+                if same and Path(_exe_of(pid.value)).name.lower() == exe_name.lower():
                     r = wintypes.RECT()
                     _user32.GetWindowRect(hwnd, ctypes.byref(r))
                     found.append(((r.right - r.left) * (r.bottom - r.top), hwnd))
@@ -106,9 +109,9 @@ if sys.platform == "win32":
             raise CaptureError(f"no window of {exe_name} was found")
         return max(found)[1]
 
-    def capture_window(exe_name: str) -> tuple[bytes, int, int]:
+    def capture_window(exe_name: str, pid: int | None = None) -> tuple[bytes, int, int]:
         """PNG data, width and height of the program's main window (its content, without the frame)."""
-        hwnd = _main_window(exe_name)
+        hwnd = _main_window(exe_name, pid)
         if _user32.IsIconic(hwnd):
             _user32.ShowWindow(hwnd, 4)  # SW_SHOWNOACTIVATE: restore, the focus stays where it is
             time.sleep(0.8)
@@ -139,5 +142,5 @@ if sys.platform == "win32":
 
 else:
 
-    def capture_window(exe_name: str) -> tuple[bytes, int, int]:
+    def capture_window(exe_name: str, pid: int | None = None) -> tuple[bytes, int, int]:
         raise CaptureError("window pictures need Windows")

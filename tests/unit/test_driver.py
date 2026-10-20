@@ -41,3 +41,15 @@ def test_editing_a_template_says_it_is_shared(session, project):
     _setup(project)
     r = session.edit_file("driver", "Template/Fast", {"Driver.Acc.ayMax": 16})
     assert "Data/Driver/Template/Fast is used by every test run" in r["driver_note"]
+
+
+def test_driver_values_for_one_standalone_program(session, project):
+    _setup(project)
+    (project / "Data" / "TestRun" / "Sub" / "Own").write_text(OWN.replace("= TestRun", "= Fast"))
+    keys, temp = session.standalone_driver("Sub/Own", {"Vehicle": "Car_B"}, {"Driver.Acc.ayMax": 14})
+    assert keys["Vehicle"] == "Car_B" and keys["Vehicle.DriverTemplate.FName"].startswith(".mcp_sa_")
+    assert temp[0].read_text().count("Driver.Acc.ayMax = 14") == 1
+    assert "Driver.Acc.ayMax = 15.8" in (project / "Data" / "Driver" / "Template" / "Fast").read_text()
+    keys, temp = session.standalone_driver("Sub/Own", {"Vehicle.DriverTemplate.FName": "TestRun"},
+                                           {"Driver.Acc.ayMax": 14})
+    assert keys["Driver.Acc.ayMax"] == 14 and temp == []  # a driver saved in the test run: plain keys

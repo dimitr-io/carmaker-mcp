@@ -441,6 +441,28 @@ def cm_results_export(
     return S().results_export(erg, quantities, t_min, t_max, file, format)
 
 
+@_tool(WRITE, "Plot result files in IPGControl")
+def cm_results_plot(
+    ergs: Annotated[list[str], Field(description="Result files (.erg), absolute or relative to the project; "
+                                                 "several are overlaid", min_length=1, max_length=8)],
+    quantities: Annotated[list[str], Field(description="Quantities to plot, e.g. ['Car.ay', 'Car.YawRate']",
+                                           min_length=1, max_length=12)],
+    x: Annotated[str | None, Field(description="Quantity for the x axis (default: Time), e.g. "
+                                               "'Car.Distance'")] = None,
+    picture: Annotated[bool, Field(description="Also return a picture of the plot")] = True,
+) -> list:
+    """Plot quantities of result files in IPGControl, IPG's plotting program; needs no MATLAB. The window
+    stays open for the user (the next plot replaces it) and a picture comes back as an image. This
+    server has no MATLAB evaluation: for MATLAB figures use a MATLAB server, or cm_results_export."""
+    out = S().results_plot(ergs, quantities, x, picture)
+    content: list = [TextContent.model_validate({"type": "text", "text": json.dumps(out)})]
+    if out.get("picture"):
+        with open(out["picture"], "rb") as f:
+            data = base64.b64encode(f.read()).decode("ascii")
+        content.append(ImageContent.model_validate({"type": "image", "data": data, "mimeType": "image/png"}))
+    return content
+
+
 @_tool(READ, "Times at which a quantity reaches values")
 def cm_results_crossings(
     erg: ErgPath,
@@ -721,12 +743,22 @@ def cm_standalone_launch(
     movie: Annotated[bool, Field(description="Show the run in IPGMovie (the program has no window; "
                                              "IPGMovie closes with it)")] = False,
     speed: Speed = None,
+    driver: Annotated[dict[str, Any] | None,
+                      Field(description="Driver template values for this program only, in a copy removed "
+                                        "when it closes")] = None,
 ) -> dict:
     """Start a NEW independent CarMaker simulation program (not connected to MATLAB) and run a test run
     on it. Only for test runs whose vehicle does not need a Simulink controller. Results go to the
     project's SimOutput; see cm_standalone_results. start=false only opens CarMaker (and IPGMovie)."""
-    return SA().launch(testrun, overrides=overrides, quantities=quantities, stop_after_s=stop_after_s,
-                       executable=executable, start=start, movie=movie, realtime_factor=speed)
+    overrides, temp = S().standalone_driver(testrun, dict(overrides or {}), driver)
+    try:
+        return SA().launch(testrun, overrides=overrides or None, quantities=quantities,
+                           stop_after_s=stop_after_s, executable=executable, start=start, movie=movie,
+                           realtime_factor=speed, temp_files=temp)
+    except Exception:
+        for p in temp:  # found live: a failed launch left its template copy in the project
+            p.unlink(missing_ok=True)
+        raise
 
 
 @_tool(WRITE, "Attach to a running CarMaker program")
@@ -804,7 +836,8 @@ def cm_study_start(
     testrun: Annotated[str, Field(description="Test run relative to Data/TestRun")],
     variations: Annotated[list[dict[str, Any]], Field(
         description="One entry per run: {'label': 'heavy', 'keys': {'Body.mass': 320}, 'workspace': "
-                    "{'Kp_yaw': 1.5}, 'driver': {'Driver.Acc.ayMax': 14}}. 'keys': infofile keys in memory "
+                    "{'Kp_yaw': 1.5}, 'driver': {'Driver.Acc.ayMax': 14, 'Driver.Acc.GGExp': "
+                    "'10 1.5 1.5\\n90 5 5'}}. 'keys': infofile keys in memory "
                     "for that run; 'workspace': MATLAB variables in 'scope', restored after the run; "
                     "'driver': driver template values, in a copy deleted after the run. All optional",
         min_length=1, max_length=50)],
@@ -825,6 +858,8 @@ def cm_study_start(
     speed: Speed = None,
     gates: Annotated[list[float] | None, Field(description="Car.Distance values in m; each row gets "
                                                            "'splits', the times between them")] = None,
+    keep_open: Annotated[bool, Field(description="With movie: leave the last run in IPGMovie (close "
+                                                 "it with cm_standalone_close)")] = False,
 ) -> dict:
     """Run one test run several times with different parameter values, one after another, in the
     background. Returns a study id at once; wait with cm_study_wait. Nothing is written to project files.
@@ -832,7 +867,7 @@ def cm_study_start(
     workspace_overruled (use scope=<model>); Driver.* keys that a driver template overrides are refused
     (use 'driver'). Rows give valid and wall_s, the clock time of the run."""
     return ST().start(testrun, variations, quantities, mode, scope, max_run_s, save_logs, movie, speed,
-                      gates)
+                      gates, keep_open)
 
 
 @_tool(READ, "Parameter study progress and results")

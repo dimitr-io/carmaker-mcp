@@ -48,9 +48,10 @@ def check_variations(variations: list[dict[str, Any]], mode: str) -> list[dict[s
     return out
 
 
-_ROW = ("label", "valid", "end_status", "sim_time_s", "distance_m", "wall_s", "splits", "result_file",
-        "logs_file", "stopped", "error", "logs_error", "log_errors", "log_warnings", "restore_errors",
-        "missing_quantities", "result_error", "gates_error")
+_ROW = ("label", "valid", "abort_reason", "vehicle", "driver_template", "driver", "end_status", "sim_time_s",
+        "distance_m", "wall_s", "splits", "result_file", "logs_file", "stopped", "error", "logs_error",
+        "log_errors", "log_warnings", "restore_errors", "missing_quantities", "result_error", "gates_error",
+        "kept_open")
 _STATS = ("min", "max", "mean", "last")
 
 
@@ -82,7 +83,7 @@ class StudyRunner:
     def start(self, testrun: str, variations: list[dict[str, Any]], quantities: list[str] | None = None,
               mode: str = "auto", scope: str = "base", max_run_s: float = 900.0,
               save_logs: bool = False, movie: bool = False, speed: float | None = None,
-              gates: list[float] | None = None) -> dict:
+              gates: list[float] | None = None, keep_open: bool = False) -> dict:
         if mode == "auto":  # found in use: cm4sl as the default failed where only standalone was ready
             try:
                 mode = "cm4sl" if self.session.backend.status().connected else "standalone"
@@ -125,6 +126,7 @@ class StudyRunner:
                 "quantities": list(quantities or DEFAULT_QUANTITIES), "max_run_s": max_run_s,
                 "save_logs": bool(save_logs), "movie": bool(movie), "speed": speed,
                 "gates": [float(g) for g in gates or []], "driver_template": template,
+                "keep_open": bool(keep_open and movie), "vehicle": self._vehicle(testrun),
                 "started": time.strftime("%Y-%m-%d %H:%M:%S"), "total": len(runs), "current": 0,
                 "current_label": None, "rows": [], "variations": runs,
             }
@@ -219,6 +221,12 @@ class StudyRunner:
             raise BackendError(f"unknown study {study!r}; known: {', '.join(self._studies)}")
         return self._studies[study]
 
+    def _vehicle(self, testrun: str) -> str | None:
+        try:
+            return self.session.project.read("testrun", testrun, keys=["Vehicle"])["values"].get("Vehicle")
+        except Exception:
+            return None
+
     def _driver_template(self, testrun: str) -> str | None:
         try:
             return self.session.project.read("testrun", testrun, keys=[_TEMPLATE])["driver"].get("template")
@@ -312,13 +320,22 @@ class StudyRunner:
                 self._announce(st)  # other processes see which run is on
                 row = self._run(st, i, var, cancel, one)
                 row["valid"] = self._valid(row, st)
+                # what the run used, so a reader can confirm it from the table (asked for in use)
+                row["vehicle"] = var["keys"].get("Vehicle", st.get("vehicle"))
+                row["driver_template"] = var["keys"].get(_TEMPLATE, st.get("driver_template"))
+                if row.get("log_errors") and not row["valid"]:
+                    row["abort_reason"] = row["log_errors"][0]
+                    row["log_errors"] = row["log_errors"][:5]
                 st["rows"].append(row)
                 self._save(st)
             st["state"] = "cancelled" if cancel.is_set() else "done"
         except Exception as e:  # a bug must not leave the study 'running' for ever
             st["state"], st["error"] = "failed", f"{type(e).__name__}: {e}"
         finally:
-            self._close_standalone(st)
+            if st.get("keep_open") and st.get("_instance"):
+                st["kept_open"] = st["_instance"]  # the last run stays in IPGMovie
+            else:
+                self._close_standalone(st)
             self.session.study_owner = None
             st["current_label"] = None
             st["finished"] = time.strftime("%Y-%m-%d %H:%M:%S")

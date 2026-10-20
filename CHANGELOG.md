@@ -9,6 +9,17 @@ parameters may still change between minor versions.
 ## [0.2.3] - unreleased (local build)
 
 ### Added
+- `cm_results_plot` shows quantities of one or more result files in IPGControl, IPG's plotting program,
+  without MATLAB: several files are overlaid, the x axis can be any quantity (for example `Car.Distance`),
+  the window stays open for the user and a picture of it comes back to the agent. It drives IPGControl's
+  own, undocumented procedures (IPGControl 3.0.17). `CM_IPGCONTROL` names the program if it is not found.
+- `cm_standalone_launch(driver={...})`: driver template values for that program, in a copy that is removed
+  when it closes (or when the launch fails).
+- `cm_study_start(movie=true, keep_open=true)` leaves the last run in IPGMovie (`kept_open` names the
+  instance). Study rows name the `vehicle` and `driver_template` they used, and an invalid row gives
+  `abort_reason` (its first log error) with at most five log errors.
+- `cm_read`'s `driver` summary includes `Driver.Acc.GGExp`, the acceleration factors and `UseVelDepend`.
+- The server instructions give a typical study workflow and say that this server has no MATLAB evaluation.
 - A study variation can carry `driver` values: the run uses a temporary copy of the test run's driver
   template with those values, deleted after the run, so a driver sweep needs no new project files.
   Checked live: the same values as plain keys change nothing while the test run names a template.
