@@ -220,6 +220,16 @@ def test_every_run_goes_at_max_speed(session, mock):
     assert mock.time_acc == 999999 and ("tcl", "SetSimTimeAcc 999999") in mock.calls
 
 
+def test_a_slower_speed_only_when_asked(session, mock):
+    mock.polls_until_idle = 2
+    session.start_sim(speed=1.0)
+    assert mock.time_acc == 1.0
+    session.wait_end(timeout_s=5, poll_s=0.01)
+    mock.polls_until_idle = 2
+    session.start_sim()
+    assert mock.time_acc == 999999  # the next run is at max again
+
+
 def test_standalone_speed_is_the_maximum_the_api_takes():
     from carmaker_mcp.standalone import MAX_REALTIME_FACTOR, _speed
 

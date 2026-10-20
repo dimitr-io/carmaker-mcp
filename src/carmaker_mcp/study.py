@@ -76,7 +76,7 @@ class StudyRunner:
     # ---- public --------------------------------------------------------------------
     def start(self, testrun: str, variations: list[dict[str, Any]], quantities: list[str] | None = None,
               mode: str = "cm4sl", scope: str = "base", max_run_s: float = 900.0,
-              save_logs: bool = False, movie: bool = False) -> dict:
+              save_logs: bool = False, movie: bool = False, speed: float | None = None) -> dict:
         if mode not in ("cm4sl", "standalone"):
             raise BackendError("mode must be 'cm4sl' or 'standalone'")
         if movie and mode != "standalone":
@@ -100,7 +100,7 @@ class StudyRunner:
             st = {
                 "id": sid, "state": "running", "testrun": testrun, "mode": mode, "scope": scope,
                 "quantities": list(quantities or DEFAULT_QUANTITIES), "max_run_s": max_run_s,
-                "save_logs": bool(save_logs), "movie": bool(movie),
+                "save_logs": bool(save_logs), "movie": bool(movie), "speed": speed,
                 "started": time.strftime("%Y-%m-%d %H:%M:%S"), "total": len(runs), "current": 0,
                 "current_label": None, "rows": [], "variations": runs,
             }
@@ -270,7 +270,8 @@ class StudyRunner:
             s.key_values(var["keys"])
             # The logs are saved when the end of the run is reported, that is before the workspace
             # values are put back below: the file holds the values this run used.
-            s.start_sim(start_timeout_s=min(st["max_run_s"], 300), save_logs=st.get("save_logs", False))
+            s.start_sim(start_timeout_s=min(st["max_run_s"], 300), save_logs=st.get("save_logs", False),
+                        speed=st.get("speed"))
             t0 = time.time()
             while True:
                 end = s.wait_end(timeout_s=2, poll_s=0.5)
@@ -313,7 +314,7 @@ class StudyRunner:
         try:
             store = sorted({"Time", "Car.v", "Car.Distance", *st["quantities"]})
             inst = sa.launch(st["testrun"], overrides=var["keys"] or None, quantities=store,
-                             movie=st.get("movie", False))["instance"]
+                             movie=st.get("movie", False), realtime_factor=st.get("speed"))["instance"]
             t0 = time.time()
             while True:
                 end = sa.wait_end(inst, 2)

@@ -70,7 +70,7 @@ def test_launch_passes_arguments_through(fake):
     assert r.structured_content["instance"] == "sa1"
     _, testrun, kw = fake.calls[0]
     assert testrun == "A/B" and kw["overrides"] == {"Vehicle.DriverTemplate.FName": "X"}
-    assert "realtime_factor" not in kw and kw["stop_after_s"] == 30.0 and kw["start"] is True
+    assert kw["realtime_factor"] is None and kw["stop_after_s"] == 30.0 and kw["start"] is True  # None: max
     assert kw["movie"] is False
     call("cm_standalone_launch", {"testrun": "A/B", "movie": True})
     assert fake.calls[-1][2]["movie"] is True  # reported from use: the runs could not be watched

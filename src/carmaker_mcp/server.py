@@ -216,6 +216,8 @@ Quantities = Annotated[list[str], Field(description="CarMaker quantity names, e.
 MaxWait = Annotated[float, Field(description="Longest time to wait in seconds; keep it below your "
                                              "client's tool time-out and call again if not finished",
                                  gt=0)]
+Speed = Annotated[float | None, Field(description="x real time; omit for CarMaker's maximum. Slower only "
+                                                   "if the user asks", gt=0)]
 Overrides = Annotated[dict[str, Any] | None, Field(description="Test-run keys to change in memory only, "
                                                                "e.g. {'Vehicle.DriverTemplate.FName': 'X'}")]
 
@@ -280,10 +282,11 @@ def cm_start_sim(
     save_logs: Annotated[bool, Field(description="Also save what Simulink logged in this run to a MAT "
                                                  "file next to the result file, as cm_model_logs_save "
                                                  "does; cm_wait_end returns it as logs_file")] = False,
+    speed: Speed = None,
 ) -> StartResult:
     """Start the loaded test run. Returns once it is running; fails at once, with Simulink's error,
     if the model does not compile. Then call cm_wait_end until it reports finished."""
-    return S().start_sim(start_timeout_s, save, save_logs)  # type: ignore[return-value]
+    return S().start_sim(start_timeout_s, save, save_logs, speed)  # type: ignore[return-value]
 
 
 @_tool(DESTRUCTIVE, "Stop the simulation")
@@ -681,12 +684,13 @@ def cm_standalone_launch(
     start: Annotated[bool, Field(description="Start the run at once")] = True,
     movie: Annotated[bool, Field(description="Show the run in IPGMovie (the program has no window; "
                                              "IPGMovie closes with it)")] = False,
+    speed: Speed = None,
 ) -> dict:
     """Start a NEW independent CarMaker simulation program (not connected to MATLAB) and run a test run
     on it. Only for test runs whose vehicle does not need a Simulink controller. Results go to the
-    project's SimOutput; see cm_standalone_results. It runs at CarMaker's maximum speed."""
+    project's SimOutput; see cm_standalone_results."""
     return SA().launch(testrun, overrides=overrides, quantities=quantities, stop_after_s=stop_after_s,
-                       executable=executable, start=start, movie=movie)
+                       executable=executable, start=start, movie=movie, realtime_factor=speed)
 
 
 @_tool(WRITE, "Attach to a running CarMaker program")
@@ -698,11 +702,12 @@ def cm_standalone_attach(
     stop_after_s: Annotated[float | None, Field(description="Safety stop at this simulation time "
                                                             "in s")] = 600.0,
     start: Annotated[bool, Field(description="Start the run at once (needs testrun)")] = False,
+    speed: Speed = None,
 ) -> dict:
     """Attach to a CarMaker simulation program that is already running, for example one started from a
     CarMaker Office window."""
     return SA().attach(pid, testrun, overrides=overrides, quantities=quantities, stop_after_s=stop_after_s,
-                       start=start)
+                       start=start, realtime_factor=speed)
 
 
 @_tool(READ, "Standalone instance status")
@@ -777,13 +782,14 @@ def cm_study_start(
                                                  "to its result file (mode cm4sl; logs_file per "
                                                  "row)")] = False,
     movie: Annotated[bool, Field(description="mode standalone: show each run in IPGMovie")] = False,
+    speed: Speed = None,
 ) -> dict:
     """Run one test run several times with different parameter values, one after another, in the
     background. Returns a study id at once; wait with cm_study_wait. Nothing is written to project files.
     The answer names values that will change nothing: keys_not_found, workspace_not_found and
     workspace_overruled (the model has the variable in its own workspace: use scope=<model>). Driver.*
     in 'keys' may not take effect when the test run names a driver template: edit the template."""
-    return ST().start(testrun, variations, quantities, mode, scope, max_run_s, save_logs, movie)
+    return ST().start(testrun, variations, quantities, mode, scope, max_run_s, save_logs, movie, speed)
 
 
 @_tool(READ, "Parameter study progress and results")

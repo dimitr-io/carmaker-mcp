@@ -66,6 +66,7 @@ Start the loaded test run. Returns once it is running; fails at once, with Simul
 | `start_timeout_s` | number | `90.0` | How long the start may take (a Simulink model may compile first) |
 | `save` | `save` \| `collect` \| `keep` | `"save"` | save: write a result file (GUI storage mode becomes 'Save all', cm_revert_all puts it back). collect: buffer only. keep: leave the GUI setting alone |
 | `save_logs` | boolean | `false` | Also save what Simulink logged in this run to a MAT file next to the result file, as cm_model_logs_save does; cm_wait_end returns it as logs_file |
+| `speed` | number or null | null | x real time; omit for CarMaker's maximum. Slower only if the user asks |
 
 ### `cm_stop_sim`
 
@@ -434,7 +435,7 @@ CarMaker simulation programs running on this machine (pid, description, whether 
 
 *Launch a standalone CarMaker run* · changes state
 
-Start a NEW independent CarMaker simulation program (not connected to MATLAB) and run a test run on it. Only for test runs whose vehicle does not need a Simulink controller. Results go to the project's SimOutput; see cm_standalone_results. It runs at CarMaker's maximum speed.
+Start a NEW independent CarMaker simulation program (not connected to MATLAB) and run a test run on it. Only for test runs whose vehicle does not need a Simulink controller. Results go to the project's SimOutput; see cm_standalone_results.
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
@@ -445,6 +446,7 @@ Start a NEW independent CarMaker simulation program (not connected to MATLAB) an
 | `executable` | string or null | null | CarMaker executable (default: the stock one of the install) |
 | `start` | boolean | `true` | Start the run at once |
 | `movie` | boolean | `false` | Show the run in IPGMovie (the program has no window; IPGMovie closes with it) |
+| `speed` | number or null | null | x real time; omit for CarMaker's maximum. Slower only if the user asks |
 
 ### `cm_standalone_attach`
 
@@ -460,6 +462,7 @@ Attach to a CarMaker simulation program that is already running, for example one
 | `quantities` | list of string or null | null | Quantities to store |
 | `stop_after_s` | number or null | `600.0` | Safety stop at this simulation time in s |
 | `start` | boolean | `false` | Start the run at once (needs testrun) |
+| `speed` | number or null | null | x real time; omit for CarMaker's maximum. Slower only if the user asks |
 
 ### `cm_standalone_status`
 
@@ -545,6 +548,7 @@ Run one test run several times with different parameter values, one after anothe
 | `max_run_s` | number | `900.0` | A run is stopped after this wall time in s |
 | `save_logs` | boolean | `false` | After every run, save what Simulink logged and the workspaces as that run used them to a MAT file next to its result file (mode cm4sl; logs_file per row) |
 | `movie` | boolean | `false` | mode standalone: show each run in IPGMovie |
+| `speed` | number or null | null | x real time; omit for CarMaker's maximum. Slower only if the user asks |
 
 ### `cm_study_status`
 

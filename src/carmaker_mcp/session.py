@@ -205,7 +205,8 @@ class Session:
         return out
 
     @_locked
-    def start_sim(self, start_timeout_s: float = 90.0, save: str = "save", save_logs: bool = False) -> dict:
+    def start_sim(self, start_timeout_s: float = 90.0, save: str = "save", save_logs: bool = False,
+                  speed: float | None = None) -> dict:
         if save not in ("save", "collect", "keep"):
             raise BackendError("save must be 'save', 'collect' or 'keep'")
         if save_logs and not hasattr(self.backend, "save_logs"):
@@ -216,7 +217,7 @@ class Session:
         self._popups_begin()
         if save != "keep":
             self._set_save_mode(save)
-        self._max_speed()
+        self._set_speed(speed)
         self._log_mark = self._mark_log()
         self._run_started = time.time()
         self._simulink_error(clear=True)
@@ -344,12 +345,13 @@ class Session:
         except BackendError:
             return None
 
-    def _max_speed(self) -> None:
-        """Runs go as fast as CarMaker can: the GUI's speed "max" (its value 999999)."""
+    def _set_speed(self, speed: float | None) -> None:
+        """Runs go as fast as CarMaker can unless a speed is asked for: the GUI's "max" is 999999."""
+        value = "999999" if speed is None else f"{float(speed):g}"
         try:
-            self._tcl("SetSimTimeAcc 999999")
+            self._tcl(f"SetSimTimeAcc {value}")
         except BackendError as e:
-            _log.warning("could not set the simulation speed to max: %s", e)
+            _log.warning("could not set the simulation speed: %s", e)
 
     def _set_save_mode(self, mode: str) -> None:
         old = self._save_mode_quiet()
