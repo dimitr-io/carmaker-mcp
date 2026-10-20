@@ -758,10 +758,12 @@ def cm_standalone_status(
 
 @_tool(DESTRUCTIVE, "Control a standalone run")
 def cm_standalone_control(
-    action: Annotated[Literal["start", "pause", "resume", "stop"], Field(description="What to do")],
+    action: Annotated[Literal["start", "pause", "resume", "stop", "movie"],
+                      Field(description="movie: (re)open IPGMovie for the program")],
     instance: Instance = None,
 ) -> dict:
-    """Start, pause, resume or stop the simulation of a standalone instance."""
+    """Start, pause, resume or stop the simulation of a standalone instance, or open its IPGMovie. A
+    study with movie=true runs on one instance: cm_standalone_status shows it."""
     return SA().control(action, instance)
 
 
@@ -826,9 +828,9 @@ def cm_study_start(
 ) -> dict:
     """Run one test run several times with different parameter values, one after another, in the
     background. Returns a study id at once; wait with cm_study_wait. Nothing is written to project files.
-    The answer names values that will change nothing: keys_not_found, workspace_not_found,
-    workspace_overruled (use scope=<model>) and keys_overruled_by_template (use 'driver'). Rows give
-    wall_s, the clock time of the run."""
+    The answer names values that will change nothing: keys_not_found, workspace_not_found and
+    workspace_overruled (use scope=<model>); Driver.* keys that a driver template overrides are refused
+    (use 'driver'). Rows give valid and wall_s, the clock time of the run."""
     return ST().start(testrun, variations, quantities, mode, scope, max_run_s, save_logs, movie, speed,
                       gates)
 
@@ -851,11 +853,13 @@ def cm_study_status(
 async def cm_study_wait(
     study: Annotated[str | None, Field(description="Study id (default: the latest)")] = None,
     timeout_s: MaxWait = 45.0,
+    until_done: Annotated[bool, Field(description="Return only when the study has ended (or at "
+                                                  "timeout_s)")] = False,
 ) -> dict:
     """Wait until another run of the study has finished or the study has ended, at most timeout_s, and
-    return the rows that finished meanwhile (cm_study_status has the whole table). Call it again while
+    return the rows no earlier call returned (cm_study_status has the whole table). Call it again while
     state is 'running'. Use this for studies instead of cm_wait_end."""
-    return await asyncio.to_thread(ST().wait_progress, study, timeout_s)
+    return await asyncio.to_thread(ST().wait_progress, study, timeout_s, until_done)
 
 
 @_tool(DESTRUCTIVE, "Cancel a parameter study")

@@ -10,10 +10,13 @@ parameters may still change between minor versions.
 
 ### Added
 - A study variation can carry `driver` values: the run uses a temporary copy of the test run's driver
-  template with those values, deleted after the run, so a driver sweep needs no new project files. The
-  study warns with `keys_overruled_by_template` when `Driver.*` keys are given as plain keys while the test
-  run names a template (checked live: such keys change nothing).
+  template with those values, deleted after the run, so a driver sweep needs no new project files.
+  Checked live: the same values as plain keys change nothing while the test run names a template.
 - `cm_study_start(gates=[...])` adds `splits` to every row: the times between `Car.Distance` gates.
+- `cm_study_wait(until_done=true)` returns only when the study has ended (or at the time-out).
+- Study rows have `valid`: the run completed and, with gates, passed every gate.
+- `cm_standalone_status` reports `movie_open`, and `cm_standalone_control(action="movie")` reopens IPGMovie
+  for a program this server launched.
 - `cm_study_start` mode `auto` (the default): the MATLAB session if it is connected, otherwise standalone.
 - `cm_results_export` writes quantities of a result file at full resolution, optionally in a time window,
   to a MAT file (one double variable per quantity, plus `quantity_names` and `units`) or a CSV file.
@@ -30,8 +33,11 @@ parameters may still change between minor versions.
   of its own, so these runs could not be watched before. IPGMovie closes with the program.
 
 ### Changed
-- `cm_study_wait` returns only the rows that finished since the last call; `cm_study_status` has the
-  whole table.
+- `cm_study_wait` returns each row once: a cursor per study, so rows that finished between two calls, or
+  during parallel calls, are not lost. `cm_study_status` has the whole table.
+- `cm_study_start` refuses `Driver.*` given as plain keys while the test run names a driver template
+  (they would change nothing), and points to the variation's `driver`.
+- `cm_read` with a filter that matches nothing says how many keys the file has.
 - A licence error of a standalone launch names this server's own open standalone programs, which hold
   licences too, instead of pointing only at MATLAB.
 - `cm_doctor` puts `ready` first. Tool descriptions say that `cm_movie_open` needs the MATLAB session,

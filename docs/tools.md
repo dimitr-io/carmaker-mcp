@@ -507,11 +507,11 @@ State of a standalone instance plus live values.
 
 *Control a standalone run* · destructive
 
-Start, pause, resume or stop the simulation of a standalone instance.
+Start, pause, resume or stop the simulation of a standalone instance, or open its IPGMovie. A study with movie=true runs on one instance: cm_standalone_status shows it.
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
-| `action` | `start` \| `pause` \| `resume` \| `stop` | required | What to do |
+| `action` | `start` \| `pause` \| `resume` \| `stop` \| `movie` | required | movie: (re)open IPGMovie for the program |
 | `instance` | string or null | null | Standalone instance id such as 'sa1' (may be omitted while there is only one) |
 
 ### `cm_standalone_wait_end`
@@ -564,7 +564,7 @@ Disconnect; for instances this server launched, also stop the CarMaker process.
 
 *Start a parameter study* · changes state
 
-Run one test run several times with different parameter values, one after another, in the background. Returns a study id at once; wait with cm_study_wait. Nothing is written to project files. The answer names values that will change nothing: keys_not_found, workspace_not_found, workspace_overruled (use scope=<model>) and keys_overruled_by_template (use 'driver'). Rows give wall_s, the clock time of the run.
+Run one test run several times with different parameter values, one after another, in the background. Returns a study id at once; wait with cm_study_wait. Nothing is written to project files. The answer names values that will change nothing: keys_not_found, workspace_not_found and workspace_overruled (use scope=<model>); Driver.* keys that a driver template overrides are refused (use 'driver'). Rows give valid and wall_s, the clock time of the run.
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
@@ -594,12 +594,13 @@ State of a study (running, done, cancelled, failed) and one row per finished run
 
 *Wait for a parameter study* · read-only
 
-Wait until another run of the study has finished or the study has ended, at most timeout_s, and return the rows that finished meanwhile (cm_study_status has the whole table). Call it again while state is 'running'. Use this for studies instead of cm_wait_end.
+Wait until another run of the study has finished or the study has ended, at most timeout_s, and return the rows no earlier call returned (cm_study_status has the whole table). Call it again while state is 'running'. Use this for studies instead of cm_wait_end.
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
 | `study` | string or null | null | Study id (default: the latest) |
 | `timeout_s` | number | `45.0` | Longest time to wait in seconds; keep it below your client's tool time-out and call again if not finished |
+| `until_done` | boolean | `false` | Return only when the study has ended (or at timeout_s) |
 
 ### `cm_study_cancel`
 

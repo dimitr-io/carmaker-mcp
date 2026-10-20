@@ -176,9 +176,9 @@ def test_driver_values_go_into_a_template_copy_for_one_run(session, project):
     sa.wait_end = lambda inst, t: (seen.append([p.name for p in tpl.iterdir()]),
                                    {"finished": True, "sim_time_s": 4.0, "error_flag": 0})[1]
     runner = StudyRunner(session, lambda: sa)
-    r = runner.start("Sub/Run1", [{"label": "a", "driver": {"Driver.Acc.ayMax": 15}},
-                                  {"label": "b", "keys": {"Driver.Acc.ayMax": 12}}], mode="standalone")
-    assert r["keys_overruled_by_template"] == ["Driver.Acc.ayMax"]
+    with pytest.raises(BackendError, match="overrides Driver.Acc.ayMax given as 'keys'.*'driver'"):
+        runner.start("Sub/Run1", [{"label": "b", "keys": {"Driver.Acc.ayMax": 12}}], mode="standalone")
+    r = runner.start("Sub/Run1", [{"label": "a", "driver": {"Driver.Acc.ayMax": 15}}], mode="standalone")
     st = runner.wait(r["study"])
     name = sa.launched[0][1]["Vehicle.DriverTemplate.FName"]
     assert name.startswith(".mcp_") and sorted(seen[0]) == sorted(["Base", name])  # the copy exists in the run
@@ -194,7 +194,22 @@ def test_gates_give_splits_per_row(session, tmp_path):
     sa.results = lambda inst: {"result_files": [str(erg)]}
     runner = StudyRunner(session, lambda: sa)
     st = runner.wait(runner.start("A", [{}], mode="standalone", gates=[1, 2])["study"])
-    assert "Car.Distance" in st["rows"][0]["gates_error"]
+    assert "Car.Distance" in st["rows"][0]["gates_error"] and st["rows"][0]["valid"] is False
+    st = runner.wait(runner.start("A", [{}], mode="standalone")["study"])
+    assert st["rows"][0]["valid"] is True  # completed, and no gates to pass
+
+
+def test_waits_return_every_row_once(session):
+    """Reported from use: rows that finished between two waits, or during parallel waits, never came back."""
+    sa = FakeStandalone()
+    runner = StudyRunner(session, lambda: sa)
+    sid = runner.start("A", [{"label": "a"}, {"label": "b"}, {"label": "c"}], mode="standalone")["study"]
+    runner.wait(sid)  # all three finished before anyone waited
+    w = runner.wait_progress(sid, timeout_s=1)
+    assert [r["label"] for r in w["rows"]] == ["a", "b", "c"] and w["new_rows"] == 3
+    assert runner.wait_progress(sid, timeout_s=1)["rows"] == []  # nothing twice
+    w = runner.wait_progress(runner.start("A", [{}, {}], mode="standalone")["study"], 20, until_done=True)
+    assert w["state"] == "done" and w["new_rows"] == 2
 
 
 def test_auto_mode_picks_what_is_ready(session, mock):

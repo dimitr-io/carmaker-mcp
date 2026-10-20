@@ -71,8 +71,8 @@ def test_compact_status_leaves_the_parameter_values_out(runner, project):
     compact, full = runner.status(), runner.status(detail="full")
     assert [row["label"] for row in compact["rows"]] == ["a", "b"] and compact["state"] == "done"
     assert all("keys" not in row and "workspace" not in row for row in compact["rows"])
-    assert set(compact["rows"][0]) <= {"label", "end_status", "sim_time_s", "distance_m", "wall_s", "result_file",
-                                       "quantities", "missing_quantities"}
+    assert set(compact["rows"][0]) <= {"label", "valid", "end_status", "sim_time_s", "distance_m", "wall_s",
+                                       "result_file", "quantities", "missing_quantities"}
     assert full["rows"][0]["keys"] == big and len(json.dumps(compact)) < len(json.dumps(full)) / 3
     with pytest.raises(BackendError, match="detail must be"):
         runner.status(detail="short")

@@ -421,6 +421,8 @@ class StandaloneManager:
                 "instance": inst.id, "pid": inst.pid, "kind": inst.kind,
                 "finished": inst.finished.is_set(), "stop_reason": inst.stop_reason,
                 "age_s": round(time.time() - inst.started_at, 1),
+                "movie_open": bool(inst.movie is not None and inst.movie.get_pid()
+                                   and _alive(inst.movie.get_pid())),
             }
             try:
                 vals = await asyncio.wait_for(inst.sc.simio.dva_read_async(*names), 5)
@@ -433,8 +435,8 @@ class StandaloneManager:
 
     def control(self, action: str, instance: str | None = None) -> dict:
         inst = self._inst(instance)
-        if action not in ("start", "pause", "resume", "stop"):
-            raise BackendError("action must be start, pause, resume or stop")
+        if action not in ("start", "pause", "resume", "stop", "movie"):
+            raise BackendError("action must be start, pause, resume, stop or movie")
 
         async def go():
             sc = inst.sc
@@ -447,6 +449,14 @@ class StandaloneManager:
                 await _maybe(sc.pause_sim())
             elif action == "resume":
                 await _maybe(sc.resume_sim())
+            elif action == "movie":  # (re)open IPGMovie for this program
+                if inst.kind != "launched":
+                    raise BackendError("IPGMovie can be opened only for a program this server launched")
+                pid = inst.movie.get_pid() if inst.movie is not None else None
+                if not (pid and _alive(pid)):
+                    await self._open_movie(inst)
+                    pid = inst.movie.get_pid() if inst.movie is not None else None
+                return {"instance": inst.id, "action": action, "ok": True, "movie_pid": pid}
             else:
                 inst.stop_reason = inst.stop_reason or "stopped by request"
                 await _maybe(sc.stop_sim())

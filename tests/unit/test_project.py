@@ -24,6 +24,12 @@ def test_files_can_be_edited_without_a_matlab_session(session, mock):
         session.load_testrun("Sub/Run1")  # what needs the session still says so
 
 
+def test_a_filter_that_matches_nothing_says_so(session):
+    """Reported from use: total_keys 0 for a vehicle that cm_list showed, with no hint why."""
+    r = session.project.read("vehicle", "Test_Vehicle", prefix="Driver")
+    assert r["total_keys"] == 0 and "no key matches the filter; the file has 5 keys" in r["note"]
+
+
 def test_read_filters(session):
     r = session.project.read("vehicle", "Test_Vehicle", prefix="Body.")
     assert r["values"] == {"Body.mass": "285", "Body.pos": "0.1 0 0.2"}

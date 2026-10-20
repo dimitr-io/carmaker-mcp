@@ -48,10 +48,9 @@ def check_variations(variations: list[dict[str, Any]], mode: str) -> list[dict[s
     return out
 
 
-_ROW = ("label", "end_status", "sim_time_s", "distance_m", "wall_s", "splits", "result_file", "logs_file",
-        "stopped",
-        "error", "logs_error", "log_errors", "log_warnings", "restore_errors", "missing_quantities",
-        "result_error", "gates_error")
+_ROW = ("label", "valid", "end_status", "sim_time_s", "distance_m", "wall_s", "splits", "result_file",
+        "logs_file", "stopped", "error", "logs_error", "log_errors", "log_warnings", "restore_errors",
+        "missing_quantities", "result_error", "gates_error")
 _STATS = ("min", "max", "mean", "last")
 
 
@@ -102,6 +101,13 @@ class StudyRunner:
             if v["driver"] and v["keys"].get(_TEMPLATE, template) in (None, "", "TestRun"):
                 v["keys"].update(v["driver"])  # the driver is the one saved in the test run itself
                 v["driver"] = {}
+        overruled = sorted({k for v in runs for k in v["keys"] if k.startswith("Driver.")
+                            and v["keys"].get(_TEMPLATE, template) not in (None, "", "TestRun")})
+        if overruled:  # checked live: such keys change nothing, so the runs would only repeat the baseline
+            raise BackendError(
+                f"the test run takes its driver from the template {template!r}, which overrides "
+                f"{', '.join(overruled)} given as 'keys': those runs would repeat the baseline. Put driver "
+                "values in each variation's 'driver' instead (a temporary template copy per run)")
         known_keys = self._known_keys(testrun, runs)
         names = sorted({n for v in runs for n in v["workspace"]})
         ws: dict[str, Any] = (self.session.workspace_check(names, scope) if names
@@ -132,13 +138,6 @@ class StudyRunner:
         out: dict[str, Any] = {"study": sid, "runs": len(runs), "state": "running", "mode": mode,
                                "note": "cm_study_wait blocks until the next run has finished; "
                                        "cm_study_status shows the table"}
-        overruled = sorted({k for v in runs for k in v["keys"] if k.startswith("Driver.")
-                            and v["keys"].get(_TEMPLATE, template) not in (None, "", "TestRun")})
-        if overruled:
-            out["keys_overruled_by_template"] = overruled
-            out["note"] += (". keys_overruled_by_template: the test run takes its driver from a template "
-                            "file, and in observed runs these keys then changed nothing. Cancel and put them "
-                            "in each variation's 'driver' instead")
         used = {k for v in runs for k in v["keys"]}
         unknown = sorted(used - set(known_keys)) if known_keys is not None else []
         if unknown:
@@ -165,7 +164,7 @@ class StudyRunner:
             raise BackendError("detail must be 'compact' or 'full'")
         st = self._get(study)
         if detail == "full":
-            out = {k: v for k, v in st.items() if k != "variations"}
+            out = {k: v for k, v in st.items() if k != "variations" and not k.startswith("_")}
             out["done"] = len(st["rows"])
             return out
         out = {k: st[k] for k in ("id", "state", "testrun", "total", "current_label", "started", "finished",
@@ -174,20 +173,24 @@ class StudyRunner:
         out["rows"] = [_compact(r) for r in st["rows"]]
         return out
 
-    def wait_progress(self, study: str | None = None, timeout_s: float = 45.0) -> dict:
-        """Block until another run of the study has finished or the study has ended, at most
-        ``timeout_s``. Returns the compact status."""
+    def wait_progress(self, study: str | None = None, timeout_s: float = 45.0,
+                      until_done: bool = False) -> dict:
+        """Block until another run of the study has finished (or, ``until_done``, until the study has
+        ended), at most ``timeout_s``. Returns the rows no earlier wait has returned: a cursor per
+        study, so rows that finished between calls, or during a parallel call, are not lost."""
         st = self._get(study)
         cond = self._progress[st["id"]]
-        done, t0 = len(st["rows"]), time.time()
+        t0 = time.time()
         with cond:
             # after the last run the end of the study follows at once: wait for that
-            cond.wait_for(lambda: st["state"] != "running" or done < len(st["rows"]) < st["total"],
-                          timeout_s)
+            cond.wait_for(lambda: st["state"] != "running" or (
+                not until_done and st.get("_delivered", 0) < len(st["rows"]) < st["total"]), timeout_s)
+            first = st.get("_delivered", 0)
+            st["_delivered"] = len(st["rows"])
         out = self.status(st["id"])
         out["waited_s"] = round(time.time() - t0, 1)
-        out["new_rows"] = len(st["rows"]) - done
-        out["rows"] = out["rows"][done:]  # found in use: the whole table again on every call
+        out["rows"] = out["rows"][first:st["_delivered"]]
+        out["new_rows"] = len(out["rows"])
         return out
 
     def cancel(self, study: str | None = None, by: str = "cm_study_cancel") -> dict:
@@ -222,6 +225,9 @@ class StudyRunner:
         except Exception:
             return None
 
+    def movie_instance(self, study: str | None = None) -> str | None:
+        return self._get(study).get("_instance")
+
     def _run(self, st: dict, i: int, var: dict, cancel: threading.Event, one: Callable) -> dict:
         """One run; 'driver' values go into a temporary copy of the driver template for that run only."""
         if not var.get("driver"):
@@ -242,6 +248,13 @@ class StudyRunner:
                 pass
         row["driver"] = var["driver"]
         return row
+
+    @staticmethod
+    def _valid(row: dict, st: dict) -> bool:
+        """The run completed and, with gates, passed every gate."""
+        if row.get("end_status") != "completed" or row.get("error"):
+            return False
+        return not st.get("gates") or (bool(row.get("splits")) and None not in row["splits"])
 
     def _gates(self, row: dict, st: dict) -> None:
         """Times between gate distances along the course (Car.Distance), for lap and sector times."""
@@ -297,7 +310,9 @@ class StudyRunner:
                     break
                 st["current"], st["current_label"] = i + 1, var["label"]
                 self._announce(st)  # other processes see which run is on
-                st["rows"].append(self._run(st, i, var, cancel, one))
+                row = self._run(st, i, var, cancel, one)
+                row["valid"] = self._valid(row, st)
+                st["rows"].append(row)
                 self._save(st)
             st["state"] = "cancelled" if cancel.is_set() else "done"
         except Exception as e:  # a bug must not leave the study 'running' for ever

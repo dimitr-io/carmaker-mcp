@@ -115,6 +115,8 @@ class Project:
         }
         if total > len(items):
             out["note"] = f"showing {len(items)} of {total} keys: filter with keys or prefix"
+        elif total == 0 and (keys or prefix):
+            out["note"] = f"no key matches the filter; the file has {len(info.to_dict())} keys"
         if kind == "testrun":
             out["driver"] = self.driver(info.to_dict())
         return out
