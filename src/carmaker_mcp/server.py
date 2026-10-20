@@ -436,8 +436,8 @@ def cm_results_export(
     format: Annotated[Literal["mat", "csv"], Field(description="When file is not given")] = "mat",
 ) -> dict:
     """Write quantities of a result file at full resolution (no thinning) to a MAT file (one double
-    variable per quantity, dots as underscores, plus quantity_names and units) or a CSV file. Never
-    overwrites."""
+    variable per quantity, dots as underscores, plus quantity_names and units) or a CSV file, in any
+    folder of this computer. Never overwrites."""
     return S().results_export(erg, quantities, t_min, t_max, file, format)
 
 
@@ -492,7 +492,8 @@ def cm_movie_open(
                                                "holds no run")] = False,
 ) -> dict:
     """Open IPGMovie, CarMaker's 3D animation window (or take over one that is open). Open it BEFORE a
-    run: it records a run only while it is open, and cm_movie_snapshot can then show any moment of it."""
+    run: it records a run only while it is open, and cm_movie_snapshot can then show any moment of it.
+    Needs the MATLAB session; without it use cm_standalone_launch(movie=true)."""
     return S().movie_open(restart)
 
 
@@ -723,7 +724,7 @@ def cm_standalone_launch(
 ) -> dict:
     """Start a NEW independent CarMaker simulation program (not connected to MATLAB) and run a test run
     on it. Only for test runs whose vehicle does not need a Simulink controller. Results go to the
-    project's SimOutput; see cm_standalone_results."""
+    project's SimOutput; see cm_standalone_results. start=false only opens CarMaker (and IPGMovie)."""
     return SA().launch(testrun, overrides=overrides, quantities=quantities, stop_after_s=stop_after_s,
                        executable=executable, start=start, movie=movie, realtime_factor=speed)
 
@@ -801,14 +802,16 @@ def cm_study_start(
     testrun: Annotated[str, Field(description="Test run relative to Data/TestRun")],
     variations: Annotated[list[dict[str, Any]], Field(
         description="One entry per run: {'label': 'heavy', 'keys': {'Body.mass': 320}, 'workspace': "
-                    "{'Kp_yaw': 1.5}}. 'keys' are infofile keys applied in memory for that run only "
-                    "(prefix a place such as 'Vehicle:' if needed); 'workspace' are MATLAB variables in "
-                    "'scope', restored after the run. Both are optional", min_length=1, max_length=50)],
+                    "{'Kp_yaw': 1.5}, 'driver': {'Driver.Acc.ayMax': 14}}. 'keys': infofile keys in memory "
+                    "for that run; 'workspace': MATLAB variables in 'scope', restored after the run; "
+                    "'driver': driver template values, in a copy deleted after the run. All optional",
+        min_length=1, max_length=50)],
     quantities: Annotated[list[str] | None, Field(description="Quantities to summarise per run (default: "
                                                               "Time, Car.v)")] = None,
-    mode: Annotated[Literal["cm4sl", "standalone"],
-                    Field(description="cm4sl: the MATLAB-connected session. standalone: a separate "
-                                      "CarMaker process per run (no 'workspace' values)")] = "cm4sl",
+    mode: Annotated[Literal["auto", "cm4sl", "standalone"],
+                    Field(description="cm4sl: the MATLAB-connected session. standalone: CarMaker without "
+                                      "MATLAB (no 'workspace' values). auto: cm4sl if MATLAB is "
+                                      "connected")] = "auto",
     scope: Scope = "base",
     max_run_s: Annotated[float, Field(description="A run is stopped after this wall time in s",
                                       gt=0)] = 900.0,
@@ -816,15 +819,18 @@ def cm_study_start(
                                                  "workspaces as that run used them to a MAT file next "
                                                  "to its result file (mode cm4sl; logs_file per "
                                                  "row)")] = False,
-    movie: Annotated[bool, Field(description="mode standalone: show each run in IPGMovie")] = False,
+    movie: Annotated[bool, Field(description="mode standalone: show the runs in IPGMovie")] = False,
     speed: Speed = None,
+    gates: Annotated[list[float] | None, Field(description="Car.Distance values in m; each row gets "
+                                                           "'splits', the times between them")] = None,
 ) -> dict:
     """Run one test run several times with different parameter values, one after another, in the
     background. Returns a study id at once; wait with cm_study_wait. Nothing is written to project files.
-    The answer names values that will change nothing: keys_not_found, workspace_not_found and
-    workspace_overruled (the model has the variable in its own workspace: use scope=<model>). Driver.*
-    in 'keys' may not take effect when the test run names a driver template: edit the template."""
-    return ST().start(testrun, variations, quantities, mode, scope, max_run_s, save_logs, movie, speed)
+    The answer names values that will change nothing: keys_not_found, workspace_not_found,
+    workspace_overruled (use scope=<model>) and keys_overruled_by_template (use 'driver'). Rows give
+    wall_s, the clock time of the run."""
+    return ST().start(testrun, variations, quantities, mode, scope, max_run_s, save_logs, movie, speed,
+                      gates)
 
 
 @_tool(READ, "Parameter study progress and results")
@@ -847,7 +853,7 @@ async def cm_study_wait(
     timeout_s: MaxWait = 45.0,
 ) -> dict:
     """Wait until another run of the study has finished or the study has ended, at most timeout_s, and
-    return the compact table (new_rows says how many runs finished meanwhile). Call it again while
+    return the rows that finished meanwhile (cm_study_status has the whole table). Call it again while
     state is 'running'. Use this for studies instead of cm_wait_end."""
     return await asyncio.to_thread(ST().wait_progress, study, timeout_s)
 

@@ -51,7 +51,7 @@ def runner(session, mock):
 
 def test_variations_are_validated():
     ok = check_variations([{"keys": {"Body.mass": 300, "Vehicle:Body.mass": 1}}, {"label": "b"}], "cm4sl")
-    assert ok[0]["label"] == "run 1" and ok[1] == {"label": "b", "keys": {}, "workspace": {}}
+    assert ok[0]["label"] == "run 1" and ok[1] == {"label": "b", "keys": {}, "workspace": {}, "driver": {}}
     for bad, msg in (
         ([{"nope": 1}], "use only the fields"),
         ([{"keys": {"bad key; exit": 1}}], "invalid infofile key"),
@@ -161,6 +161,50 @@ def test_a_study_shown_in_ipgmovie_keeps_one_window(session):
     runner = StudyRunner(session, lambda: sa2)
     st = runner.wait(runner.start("A", var[:2], mode="standalone", movie=True)["study"])
     assert len(sa2.launched) == 2 and sa2.closed == ["sa1", "sa2"]
+
+
+def test_driver_values_go_into_a_template_copy_for_one_run(session, project):
+    """Asked for in use: Driver.* keys changed nothing while the test run named a template, and a sweep
+    meant cloning a template file per value into the project."""
+    tpl = project / "Data" / "Driver" / "Template"
+    tpl.mkdir(parents=True)
+    (tpl / "Base").write_text("#INFOFILE1.1 (UTF-8) - Do not remove this line!\nDriver.Acc.ayMax = 13\n")
+    run = project / "Data" / "TestRun" / "Sub" / "Run1"
+    run.write_text(run.read_text() + "Vehicle.DriverTemplate.FName = Base\n")
+    sa = FakeStandalone()
+    seen = []
+    sa.wait_end = lambda inst, t: (seen.append([p.name for p in tpl.iterdir()]),
+                                   {"finished": True, "sim_time_s": 4.0, "error_flag": 0})[1]
+    runner = StudyRunner(session, lambda: sa)
+    r = runner.start("Sub/Run1", [{"label": "a", "driver": {"Driver.Acc.ayMax": 15}},
+                                  {"label": "b", "keys": {"Driver.Acc.ayMax": 12}}], mode="standalone")
+    assert r["keys_overruled_by_template"] == ["Driver.Acc.ayMax"]
+    st = runner.wait(r["study"])
+    name = sa.launched[0][1]["Vehicle.DriverTemplate.FName"]
+    assert name.startswith(".mcp_") and sorted(seen[0]) == sorted(["Base", name])  # the copy exists in the run
+    assert sorted(p.name for p in tpl.iterdir()) == ["Base"]  # and is gone afterwards
+    assert st["rows"][0]["driver"] == {"Driver.Acc.ayMax": 15}
+
+
+def test_gates_give_splits_per_row(session, tmp_path):
+    from test_results import make_erg
+
+    erg = make_erg(tmp_path)  # no Car.Distance in this file: the row says why there are no splits
+    sa = FakeStandalone()
+    sa.results = lambda inst: {"result_files": [str(erg)]}
+    runner = StudyRunner(session, lambda: sa)
+    st = runner.wait(runner.start("A", [{}], mode="standalone", gates=[1, 2])["study"])
+    assert "Car.Distance" in st["rows"][0]["gates_error"]
+
+
+def test_auto_mode_picks_what_is_ready(session, mock):
+    sa = FakeStandalone()
+    runner = StudyRunner(session, lambda: sa)
+    mock.connected = False
+    assert runner.start("A", [{}])["mode"] == "standalone"
+    runner.wait()
+    mock.connected = True
+    assert runner.start("Sub/Run1", [{}])["mode"] == "cm4sl"
 
 
 def test_standalone_study_cancel(session):

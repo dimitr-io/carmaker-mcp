@@ -22,7 +22,8 @@ from .results import Erg, ErgError
 from .session import Session
 
 _KEY = re.compile(r"^[A-Za-z0-9_]+(:[A-Za-z0-9_.]+)?(\.[A-Za-z0-9_]+)*$")
-_ALLOWED = {"label", "keys", "workspace"}
+_ALLOWED = {"label", "keys", "workspace", "driver"}
+_TEMPLATE = "Vehicle.DriverTemplate.FName"
 DEFAULT_QUANTITIES = ["Time", "Car.v"]
 
 
@@ -31,22 +32,26 @@ def check_variations(variations: list[dict[str, Any]], mode: str) -> list[dict[s
     for i, v in enumerate(variations):
         if not isinstance(v, dict) or set(v) - _ALLOWED:
             raise BackendError(f"variation {i + 1}: use only the fields {sorted(_ALLOWED)}")
-        keys, ws = v.get("keys") or {}, v.get("workspace") or {}
-        if not isinstance(keys, dict) or not isinstance(ws, dict):
-            raise BackendError(f"variation {i + 1}: 'keys' and 'workspace' must be objects")
+        keys, ws, drv = v.get("keys") or {}, v.get("workspace") or {}, v.get("driver") or {}
+        if not isinstance(keys, dict) or not isinstance(ws, dict) or not isinstance(drv, dict):
+            raise BackendError(f"variation {i + 1}: 'keys', 'workspace' and 'driver' must be objects")
+        bad = [k for k in drv if not str(k).startswith("Driver.")]
+        if bad:
+            raise BackendError(f"variation {i + 1}: 'driver' takes Driver.* keys only, not {bad}")
         for k in keys:
             if not _KEY.match(str(k)):
                 raise BackendError(f"variation {i + 1}: invalid infofile key {k!r}")
         if ws and mode == "standalone":
             raise BackendError("standalone runs have no MATLAB workspace: use 'keys' only, or mode 'cm4sl'")
         out.append({"label": str(v.get("label") or f"run {i + 1}"), "keys": dict(keys),
-                    "workspace": dict(ws)})
+                    "workspace": dict(ws), "driver": dict(drv)})
     return out
 
 
-_ROW = ("label", "end_status", "sim_time_s", "distance_m", "wall_s", "result_file", "logs_file", "stopped",
+_ROW = ("label", "end_status", "sim_time_s", "distance_m", "wall_s", "splits", "result_file", "logs_file",
+        "stopped",
         "error", "logs_error", "log_errors", "log_warnings", "restore_errors", "missing_quantities",
-        "result_error")
+        "result_error", "gates_error")
 _STATS = ("min", "max", "mean", "last")
 
 
@@ -76,16 +81,27 @@ class StudyRunner:
 
     # ---- public --------------------------------------------------------------------
     def start(self, testrun: str, variations: list[dict[str, Any]], quantities: list[str] | None = None,
-              mode: str = "cm4sl", scope: str = "base", max_run_s: float = 900.0,
-              save_logs: bool = False, movie: bool = False, speed: float | None = None) -> dict:
+              mode: str = "auto", scope: str = "base", max_run_s: float = 900.0,
+              save_logs: bool = False, movie: bool = False, speed: float | None = None,
+              gates: list[float] | None = None) -> dict:
+        if mode == "auto":  # found in use: cm4sl as the default failed where only standalone was ready
+            try:
+                mode = "cm4sl" if self.session.backend.status().connected else "standalone"
+            except BackendError:
+                mode = "standalone"
         if mode not in ("cm4sl", "standalone"):
-            raise BackendError("mode must be 'cm4sl' or 'standalone'")
+            raise BackendError("mode must be 'auto', 'cm4sl' or 'standalone'")
         if movie and mode != "standalone":
             raise BackendError("movie is for mode 'standalone'; in the MATLAB session open IPGMovie with "
                                "cm_movie_open before the study")
         if save_logs and mode != "cm4sl":
             raise BackendError("save_logs needs the MATLAB-connected session (mode 'cm4sl')")
         runs = check_variations(variations, mode)
+        template = self._driver_template(testrun)
+        for v in runs:
+            if v["driver"] and v["keys"].get(_TEMPLATE, template) in (None, "", "TestRun"):
+                v["keys"].update(v["driver"])  # the driver is the one saved in the test run itself
+                v["driver"] = {}
         known_keys = self._known_keys(testrun, runs)
         names = sorted({n for v in runs for n in v["workspace"]})
         ws: dict[str, Any] = (self.session.workspace_check(names, scope) if names
@@ -102,6 +118,7 @@ class StudyRunner:
                 "id": sid, "state": "running", "testrun": testrun, "mode": mode, "scope": scope,
                 "quantities": list(quantities or DEFAULT_QUANTITIES), "max_run_s": max_run_s,
                 "save_logs": bool(save_logs), "movie": bool(movie), "speed": speed,
+                "gates": [float(g) for g in gates or []], "driver_template": template,
                 "started": time.strftime("%Y-%m-%d %H:%M:%S"), "total": len(runs), "current": 0,
                 "current_label": None, "rows": [], "variations": runs,
             }
@@ -112,9 +129,16 @@ class StudyRunner:
             t = threading.Thread(target=self._work, args=(st,), name=f"study-{sid}", daemon=True)
             self._threads[sid] = t
             t.start()
-        out: dict[str, Any] = {"study": sid, "runs": len(runs), "state": "running",
+        out: dict[str, Any] = {"study": sid, "runs": len(runs), "state": "running", "mode": mode,
                                "note": "cm_study_wait blocks until the next run has finished; "
                                        "cm_study_status shows the table"}
+        overruled = sorted({k for v in runs for k in v["keys"] if k.startswith("Driver.")
+                            and v["keys"].get(_TEMPLATE, template) not in (None, "", "TestRun")})
+        if overruled:
+            out["keys_overruled_by_template"] = overruled
+            out["note"] += (". keys_overruled_by_template: the test run takes its driver from a template "
+                            "file, and in observed runs these keys then changed nothing. Cancel and put them "
+                            "in each variation's 'driver' instead")
         used = {k for v in runs for k in v["keys"]}
         unknown = sorted(used - set(known_keys)) if known_keys is not None else []
         if unknown:
@@ -163,6 +187,7 @@ class StudyRunner:
         out = self.status(st["id"])
         out["waited_s"] = round(time.time() - t0, 1)
         out["new_rows"] = len(st["rows"]) - done
+        out["rows"] = out["rows"][done:]  # found in use: the whole table again on every call
         return out
 
     def cancel(self, study: str | None = None, by: str = "cm_study_cancel") -> dict:
@@ -190,6 +215,43 @@ class StudyRunner:
         if study not in self._studies:
             raise BackendError(f"unknown study {study!r}; known: {', '.join(self._studies)}")
         return self._studies[study]
+
+    def _driver_template(self, testrun: str) -> str | None:
+        try:
+            return self.session.project.read("testrun", testrun, keys=[_TEMPLATE])["driver"].get("template")
+        except Exception:
+            return None
+
+    def _run(self, st: dict, i: int, var: dict, cancel: threading.Event, one: Callable) -> dict:
+        """One run; 'driver' values go into a temporary copy of the driver template for that run only."""
+        if not var.get("driver"):
+            return one(st, var, cancel)
+        base = var["keys"].get(_TEMPLATE, st.get("driver_template"))
+        name = f".mcp_{st['id']}_{i + 1}"
+        try:
+            path = self.session.project.temp_driver(str(base), var["driver"], name)
+        except Exception as e:
+            return {"label": var["label"], "keys": var["keys"], "driver": var["driver"],
+                    "error": f"driver: {e}"}
+        try:
+            row = one(st, {**var, "keys": {**var["keys"], _TEMPLATE: name}}, cancel)
+        finally:
+            try:
+                path.unlink()
+            except OSError:
+                pass
+        row["driver"] = var["driver"]
+        return row
+
+    def _gates(self, row: dict, st: dict) -> None:
+        """Times between gate distances along the course (Car.Distance), for lap and sector times."""
+        if not st.get("gates") or not row.get("result_file"):
+            return
+        try:
+            c = Erg(Path(row["result_file"])).crossings("Car.Distance", st["gates"])
+            row["splits"] = [None if b is None else round(b, 4) for b in c["between_first"]]
+        except (ErgError, OSError) as e:
+            row["gates_error"] = str(e)
 
     def _known_keys(self, testrun: str, runs: list[dict]) -> list[str] | None:
         """The override keys that the test run or its vehicle file contain (None: could not look)."""
@@ -235,7 +297,7 @@ class StudyRunner:
                     break
                 st["current"], st["current_label"] = i + 1, var["label"]
                 self._announce(st)  # other processes see which run is on
-                st["rows"].append(one(st, var, cancel))
+                st["rows"].append(self._run(st, i, var, cancel, one))
                 self._save(st)
             st["state"] = "cancelled" if cancel.is_set() else "done"
         except Exception as e:  # a bug must not leave the study 'running' for ever
@@ -248,6 +310,7 @@ class StudyRunner:
             self._save(st)
 
     def _summarise(self, row: dict, st: dict) -> None:
+        self._gates(row, st)
         if not row.get("result_file"):
             return
         try:

@@ -211,7 +211,7 @@ Interpolated times at which a quantity crosses each value, and the time between 
 
 *Export a result file* · changes state
 
-Write quantities of a result file at full resolution (no thinning) to a MAT file (one double variable per quantity, dots as underscores, plus quantity_names and units) or a CSV file. Never overwrites.
+Write quantities of a result file at full resolution (no thinning) to a MAT file (one double variable per quantity, dots as underscores, plus quantity_names and units) or a CSV file, in any folder of this computer. Never overwrites.
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
@@ -247,7 +247,7 @@ Add quantities to, or remove them from, the project's output-quantities file (ba
 
 *Open IPGMovie* · changes state
 
-Open IPGMovie, CarMaker's 3D animation window (or take over one that is open). Open it BEFORE a run: it records a run only while it is open, and cm_movie_snapshot can then show any moment of it.
+Open IPGMovie, CarMaker's 3D animation window (or take over one that is open). Open it BEFORE a run: it records a run only while it is open, and cm_movie_snapshot can then show any moment of it. Needs the MATLAB session; without it use cm_standalone_launch(movie=true).
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
@@ -463,7 +463,7 @@ CarMaker simulation programs running on this machine (pid, description, whether 
 
 *Launch a standalone CarMaker run* · changes state
 
-Start a NEW independent CarMaker simulation program (not connected to MATLAB) and run a test run on it. Only for test runs whose vehicle does not need a Simulink controller. Results go to the project's SimOutput; see cm_standalone_results.
+Start a NEW independent CarMaker simulation program (not connected to MATLAB) and run a test run on it. Only for test runs whose vehicle does not need a Simulink controller. Results go to the project's SimOutput; see cm_standalone_results. start=false only opens CarMaker (and IPGMovie).
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
@@ -564,19 +564,20 @@ Disconnect; for instances this server launched, also stop the CarMaker process.
 
 *Start a parameter study* · changes state
 
-Run one test run several times with different parameter values, one after another, in the background. Returns a study id at once; wait with cm_study_wait. Nothing is written to project files. The answer names values that will change nothing: keys_not_found, workspace_not_found and workspace_overruled (the model has the variable in its own workspace: use scope=<model>). Driver.* in 'keys' may not take effect when the test run names a driver template: edit the template.
+Run one test run several times with different parameter values, one after another, in the background. Returns a study id at once; wait with cm_study_wait. Nothing is written to project files. The answer names values that will change nothing: keys_not_found, workspace_not_found, workspace_overruled (use scope=<model>) and keys_overruled_by_template (use 'driver'). Rows give wall_s, the clock time of the run.
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
 | `testrun` | string | required | Test run relative to Data/TestRun |
-| `variations` | list of object | required | One entry per run: {'label': 'heavy', 'keys': {'Body.mass': 320}, 'workspace': {'Kp_yaw': 1.5}}. 'keys' are infofile keys applied in memory for that run only (prefix a place such as 'Vehicle:' if needed); 'workspace' are MATLAB variables in 'scope', restored after the run. Both are optional |
+| `variations` | list of object | required | One entry per run: {'label': 'heavy', 'keys': {'Body.mass': 320}, 'workspace': {'Kp_yaw': 1.5}, 'driver': {'Driver.Acc.ayMax': 14}}. 'keys': infofile keys in memory for that run; 'workspace': MATLAB variables in 'scope', restored after the run; 'driver': driver template values, in a copy deleted after the run. All optional |
 | `quantities` | list of string or null | null | Quantities to summarise per run (default: Time, Car.v) |
-| `mode` | `cm4sl` \| `standalone` | `"cm4sl"` | cm4sl: the MATLAB-connected session. standalone: a separate CarMaker process per run (no 'workspace' values) |
+| `mode` | `auto` \| `cm4sl` \| `standalone` | `"auto"` | cm4sl: the MATLAB-connected session. standalone: CarMaker without MATLAB (no 'workspace' values). auto: cm4sl if MATLAB is connected |
 | `scope` | string | `"base"` | 'base' for the MATLAB base workspace, or the name of a loaded Simulink model for that model's workspace |
 | `max_run_s` | number | `900.0` | A run is stopped after this wall time in s |
 | `save_logs` | boolean | `false` | After every run, save what Simulink logged and the workspaces as that run used them to a MAT file next to its result file (mode cm4sl; logs_file per row) |
-| `movie` | boolean | `false` | mode standalone: show each run in IPGMovie |
+| `movie` | boolean | `false` | mode standalone: show the runs in IPGMovie |
 | `speed` | number or null | null | x real time; omit for CarMaker's maximum. Slower only if the user asks |
+| `gates` | list of number or null | null | Car.Distance values in m; each row gets 'splits', the times between them |
 
 ### `cm_study_status`
 
@@ -593,7 +594,7 @@ State of a study (running, done, cancelled, failed) and one row per finished run
 
 *Wait for a parameter study* · read-only
 
-Wait until another run of the study has finished or the study has ended, at most timeout_s, and return the compact table (new_rows says how many runs finished meanwhile). Call it again while state is 'running'. Use this for studies instead of cm_wait_end.
+Wait until another run of the study has finished or the study has ended, at most timeout_s, and return the rows that finished meanwhile (cm_study_status has the whole table). Call it again while state is 'running'. Use this for studies instead of cm_wait_end.
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|

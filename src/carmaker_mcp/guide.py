@@ -19,7 +19,9 @@ INSTRUCTIONS = (
     "learnt for one vehicle. Changing Vehicle or cloning another vehicle's test run keeps the old driver: "
     "check `driver` in the answer of cm_read, cm_edit or cm_clone, and ask the user which template if "
     "unclear. Driver parameters (Driver.Acc.*, dtAccBrake, StWhlAngle*) are changed in the template file "
-    "(cm_edit kind 'driver'), which other test runs share: tell the user which file changed. Lap times "
+    "(cm_edit kind 'driver'), which other test runs share: tell the user which file changed. As test-run "
+    "or study keys they change nothing while a template is named; in a study use a variation's 'driver' "
+    "(a temporary template copy per run). Lap times "
     "depend on the driver's limit Driver.Acc.ayMax: compare vehicle variants each at its own limit. "
     "Driver.Acc.GGExp (rows 'vel_kmh exp_acc exp_dec') shapes how much lateral and longitudinal "
     "acceleration the driver combines; for a car with aero downforce, exponents rising with speed (e.g. "
@@ -93,8 +95,10 @@ Data/Driver/Template, or is `TestRun` for the parametrization saved in the test 
 * Driver parameters (`Driver.Acc.axMax/axMin/ayMax`, `Driver.Long.dtAccBrake`, `Driver.Vel.dtMinAccelDecel`,
   `Driver.Long.TractionControl`, `Driver.Lat.StWhlAngle*`) belong in the template:
   `cm_edit("driver", "Template/<name>", ...)`. A template is shared by every test run that names it:
-  tell the user which file changed. Whether the same keys set on a test run or as study `keys` take effect
-  when a template is named is not established; do not rely on it, and do not claim they cannot work.
+  tell the user which file changed. While a template is named, the same keys set on the test run or as
+  study `keys` change nothing (checked: a standalone skid pad run with `Driver.Acc.ayMax` as a key was
+  identical to the stock run). For a study, put driver values in a variation's `driver`: each run gets a
+  copy of the template with those values, deleted afterwards, and no project file changes.
 * IPGDriver corners only as fast as `Driver.Acc.ayMax` allows, not as fast as the car could: a run whose
   largest `Car.ay` is close to it was limited by the driver. To compare vehicle variants on time, give each
   its own limit (a template per variant, or a value the user agrees to), judge only runs that ended

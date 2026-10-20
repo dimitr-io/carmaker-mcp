@@ -88,10 +88,13 @@ def test_wait_returns_when_a_run_has_finished_and_when_the_study_has(runner, moc
     threading.Timer(0.3, lambda: setattr(mock, "polls_until_idle", 3)).start()  # now the runs end
     w = runner.wait_progress(r["study"], timeout_s=20)
     assert w["new_rows"] >= 1 and w["rows"][0]["label"] == "a"
+    seen = [row["label"] for row in w["rows"]]
     while w["state"] == "running":
         w = runner.wait_progress(r["study"], timeout_s=20)
-    assert w["state"] == "done" and [row["label"] for row in w["rows"]] == ["a", "b"]
-    assert runner.wait_progress(r["study"], timeout_s=5)["new_rows"] == 0  # over: returns at once
+        seen += [row["label"] for row in w["rows"]]
+    assert w["state"] == "done" and seen == ["a", "b"]  # each row once: only new rows come back
+    w = runner.wait_progress(r["study"], timeout_s=5)
+    assert w["new_rows"] == 0 and w["rows"] == [] and w["done"] == 2  # over: returns at once
 
 
 def test_wait_end_during_a_study_points_to_the_study(runner, session, mock):

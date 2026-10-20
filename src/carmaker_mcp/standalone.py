@@ -109,7 +109,7 @@ def _alive(pid: int) -> bool:
         kernel32.CloseHandle(handle)
 
 
-def _launch_failure(error: Exception, log_lines: list[str]) -> str:
+def _launch_failure(error: Exception, log_lines: list[str], own: list[str] | None = None) -> str:
     """Why a launched CarMaker program could not be used, from its own log if it wrote one."""
     errs = [" ".join(ln.split()) for ln in sessionlog.filter_level(log_lines, "error")]
     errs = [e for e in errs if "FATAL ERROR - Application stopped" not in e]
@@ -117,9 +117,13 @@ def _launch_failure(error: Exception, log_lines: list[str]) -> str:
         return f"CarMaker did not start: {type(error).__name__}: {str(error).splitlines()[0][:300]}"
     msg = "CarMaker started but stopped with an error: " + " | ".join(errs[:3])
     if any("license" in e.lower() for e in errs):
-        msg += (". Another CarMaker program is holding the licence, for example the CarMaker for Simulink "
-                "engine of an open MATLAB (closing the CarMaker GUI window does not release it): close "
-                "that model or MATLAB, or use the MATLAB-connected session instead")
+        if own:  # found in use: the holder was a finished instance of this server, not MATLAB
+            msg += (f". This server still has standalone programs open, each holding a licence: "
+                    f"{', '.join(own)}. cm_standalone_close frees one")
+        else:
+            msg += (". Another CarMaker program is holding the licence, for example the CarMaker for "
+                    "Simulink engine of an open MATLAB (closing the CarMaker GUI window does not release "
+                    "it): close that model or MATLAB, or use the MATLAB-connected session instead")
     return msg
 
 
@@ -249,7 +253,9 @@ class StandaloneManager:
                 # The program may have come up and stopped with an error (no licence, bad project):
                 # do not leave it behind, and say what its log says.
                 await self._abandon(sc, master)
-                raise BackendError(_launch_failure(e, sessionlog.since(proj, mark))) from e
+                own = [f"{i.id} ({'finished' if i.finished.is_set() else 'running'}, {i.testrun})"
+                       for i in self.instances.values() if i.kind == "launched"]
+                raise BackendError(_launch_failure(e, sessionlog.since(proj, mark), own)) from e
             inst = Instance(iid, "launched", sc, master, var, master.get_pid(), testrun,
                             stop_after_s=stop_after_s, finished=asyncio.Event(), project=proj, log_mark=mark)
             self.instances[iid] = inst

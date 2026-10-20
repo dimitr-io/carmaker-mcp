@@ -203,6 +203,30 @@ class Project:
                            "know")
         return out
 
+    def temp_driver(self, base: str, values: dict[str, Any], name: str) -> Path:
+        """A copy of driver template ``base`` with ``values``, for one run of a study. Not logged: the
+        study deletes it after the run."""
+        src = None
+        for cand in ("Template/" + base, base):
+            p = self.path("driver", cand)
+            if p.is_file():
+                src = p
+                break
+        if src is None:
+            raise ProjectError(f"no driver template {base!r} in Data/Driver/Template")
+        info = InfoFile.load(src)
+        for k, v in values.items():
+            try:
+                if isinstance(v, str) and ("\n" in v or info.is_text(k)):
+                    info.set_text(k, v)
+                else:
+                    info.set(k, _fmt(v))
+            except InfoFileError as e:
+                raise ProjectError(str(e)) from e
+        dst = self.path("driver", "Template/" + name)
+        info.save(dst)
+        return dst
+
     def create(self, kind: str, name: str, content: str) -> dict:
         """Write a new file of this kind. Never overwrites; a revert moves it to the trash folder."""
         if not isinstance(content, str) or not content.strip():

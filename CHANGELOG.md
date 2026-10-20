@@ -9,6 +9,12 @@ parameters may still change between minor versions.
 ## [0.2.3] - unreleased (local build)
 
 ### Added
+- A study variation can carry `driver` values: the run uses a temporary copy of the test run's driver
+  template with those values, deleted after the run, so a driver sweep needs no new project files. The
+  study warns with `keys_overruled_by_template` when `Driver.*` keys are given as plain keys while the test
+  run names a template (checked live: such keys change nothing).
+- `cm_study_start(gates=[...])` adds `splits` to every row: the times between `Car.Distance` gates.
+- `cm_study_start` mode `auto` (the default): the MATLAB session if it is connected, otherwise standalone.
 - `cm_results_export` writes quantities of a result file at full resolution, optionally in a time window,
   to a MAT file (one double variable per quantity, plus `quantity_names` and `units`) or a CSV file.
 - `cm_results_crossings` gives the interpolated times at which a quantity reaches given values and the
@@ -24,6 +30,13 @@ parameters may still change between minor versions.
   of its own, so these runs could not be watched before. IPGMovie closes with the program.
 
 ### Changed
+- `cm_study_wait` returns only the rows that finished since the last call; `cm_study_status` has the
+  whole table.
+- A licence error of a standalone launch names this server's own open standalone programs, which hold
+  licences too, instead of pointing only at MATLAB.
+- `cm_doctor` puts `ready` first. Tool descriptions say that `cm_movie_open` needs the MATLAB session,
+  that `cm_standalone_launch(start=false)` only opens CarMaker, where `cm_results_export` may write, and
+  what `wall_s` is.
 - `cm_clone` also returns the new file's `name` in the form `cm_list` uses. A `cm_results_summary` search
   without matches lists the quantities the file holds.
 - The server instructions and the guide explain the driver's g-g exponents (`Driver.Acc.GGExp`, rows
