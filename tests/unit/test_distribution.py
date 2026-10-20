@@ -86,3 +86,14 @@ def test_unfilled_host_placeholders_count_as_unset(monkeypatch):
     monkeypatch.setenv("CM_MATLAB_SESSION", "mine")
     cfg = Config.from_env()
     assert cfg.model is None and cfg.popup_timeout is None and cfg.matlab_session == "mine"
+
+
+def test_a_local_build_is_newer_each_time_and_older_than_the_release(mcpb):
+    import time
+
+    from packaging.version import Version
+
+    early = mcpb.dev_versions("0.2.3", time.strptime("2026-10-20 09:05", "%Y-%m-%d %H:%M"))
+    late = mcpb.dev_versions("0.2.3", time.strptime("2026-10-20 15:30", "%Y-%m-%d %H:%M"))
+    assert early == ("0.2.3-dev.202610200905", "0.2.3.dev202610200905")
+    assert Version(early[1]) < Version(late[1]) < Version("0.2.3")

@@ -4,6 +4,7 @@
     python packaging/build_mcpb.py --matlab R2024a
     python packaging/build_mcpb.py --no-matlab              # standalone instances and --mock only
     python packaging/build_mcpb.py --stage-only             # write build/mcpb/<name>/ and stop
+    python packaging/build_mcpb.py --dev                    # local build: version 0.2.3-dev.<date+time>
 
 The bundle uses the MCPB "uv" server type: it contains the server's source and a small pyproject.toml,
 and the host creates the Python environment with uv. Because the MATLAB engine package must have the
@@ -20,6 +21,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -178,16 +180,32 @@ def bundle_pyproject(ver: str, python: str, matlab: str | None) -> str:
     ])
 
 
-def stage(python: str, matlab: str | None) -> Path:
-    ver = version()
+def dev_versions(ver: str, now: time.struct_time | None = None) -> tuple[str, str]:
+    """A local build's version, higher with every build and lower than the release itself:
+    semantic versioning for the bundle manifest (0.2.3-dev.202610201530), PEP 440 for Python
+    (0.2.3.dev202610201530). A host that compares versions then takes a newer local build as an update."""
+    stamp = time.strftime("%Y%m%d%H%M", now or time.localtime())
+    return f"{ver}-dev.{stamp}", f"{ver}.dev{stamp}"
+
+
+def stage(python: str, matlab: str | None, dev: bool = False) -> Path:
+    ver = py_ver = version()
+    if dev:
+        ver, py_ver = dev_versions(ver)
     name = f"carmaker-mcp-{ver}-{matlab or 'standalone'}-py{python.replace('.', '')}"
     out = ROOT / "build" / "mcpb" / name
     if out.exists():
         shutil.rmtree(out)
     out.mkdir(parents=True)
     shutil.copytree(SRC, out / "carmaker_mcp", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    if dev:  # the server reports its version in its log and in cm_doctor: say which build it is
+        init = out / "carmaker_mcp" / "__init__.py"
+        text = re.sub(r'^__version__ = "[^"]+"', f'__version__ = "{py_ver}"',
+                      init.read_text(encoding="utf-8"), count=1, flags=re.M)
+        init.write_text(text, encoding="utf-8", newline="\n")
     (out / "server.py").write_text(ENTRY, encoding="utf-8", newline="\n")
-    (out / "pyproject.toml").write_text(bundle_pyproject(ver, python, matlab), encoding="utf-8", newline="\n")
+    (out / "pyproject.toml").write_text(bundle_pyproject(py_ver, python, matlab), encoding="utf-8",
+                                        newline="\n")
     (out / ".python-version").write_text(python + "\n", encoding="utf-8", newline="\n")
     text = json.dumps(manifest(ver, python, matlab, tool_list()), indent=2) + "\n"
     (out / "manifest.json").write_text(text, encoding="utf-8", newline="\n")
@@ -206,10 +224,12 @@ def main() -> int:
                     help="Python version (default: the newest one the engine package of the MATLAB release "
                          "installs on; your CarMaker must ship cmapi for it)")
     ap.add_argument("--stage-only", action="store_true", help="do not pack")
+    ap.add_argument("--dev", action="store_true",
+                    help="local build: version <version>-dev.<date and time>, so each build is newer")
     args = ap.parse_args()
 
     matlab = None if args.no_matlab else args.matlab
-    staged = stage(args.python or default_python(matlab), matlab)
+    staged = stage(args.python or default_python(matlab), matlab, args.dev)
     print(f"staged {staged}")
     if args.stage_only:
         return 0

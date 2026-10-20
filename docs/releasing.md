@@ -65,6 +65,10 @@ Python environment. Because the MATLAB engine package is version-bound, there is
 (`--matlab R2024b`) and one without MATLAB (`--no-matlab`, standalone runs only). The workflow builds the
 R2024b and the no-MATLAB bundle; build others by hand if needed.
 
+For trying changes in Claude Desktop before a release, `--dev` builds a bundle whose version is the
+current one plus the build's date and time (`0.2.3-dev.202610201530`). Each such build counts as newer
+than the one before and as older than the release itself.
+
 ## The single-file executable
 
 `packaging/build_exe.ps1` (PyInstaller) is built by hand per CarMaker / MATLAB combination and can be attached
