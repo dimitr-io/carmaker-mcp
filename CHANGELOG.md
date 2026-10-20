@@ -6,6 +6,8 @@ parameters may still change between minor versions.
 
 ## [Unreleased]
 
+## [0.2.3] - unreleased (local build)
+
 ### Added
 - `cm_standalone_launch(movie=true)` and `cm_study_start(mode="standalone", movie=true)` show a standalone
   run in IPGMovie, connected to that CarMaker program while it runs. A standalone program has no window
