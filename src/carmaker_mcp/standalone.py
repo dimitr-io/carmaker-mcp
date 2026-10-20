@@ -234,16 +234,7 @@ class StandaloneManager:
 
         async def go():
             cm = self._cmapi
-            cm.Project.load(proj)
-            tr = cm.Project.instance().load_testrun_parametrization(Path(testrun))
-            for k, v in (overrides or {}).items():
-                tr.set_parameter_value(k, str(v))
-            var = cm.Variation.create_from_testrun(tr)
-            var.set_storage_mode(cm.StorageMode.save)
-            oq = cm.OutputQuantities()
-            oq.add_quantities(quantities or DEFAULT_QUANTITIES)
-            var.set_outputquantities(oq)
-            var.set_initial_realtimefactor(_speed(realtime_factor))
+            var = self._variation(proj, testrun, overrides, quantities, realtime_factor)
             master = cm.CarMaker()
             master.set_executable_path(exe)
             sc = cm.SimControlInteractive()
@@ -275,6 +266,47 @@ class StandaloneManager:
         if inst.movie is not None:
             out["movie_pid"] = inst.movie.get_pid()
         return out
+
+    def _variation(self, proj: Path, testrun: str, overrides: dict[str, Any] | None,
+                   quantities: list[str] | None, realtime_factor: float | None):
+        cm = self._cmapi
+        cm.Project.load(proj)
+        tr = cm.Project.instance().load_testrun_parametrization(Path(testrun))
+        for k, v in (overrides or {}).items():
+            tr.set_parameter_value(k, str(v))
+        var = cm.Variation.create_from_testrun(tr)
+        var.set_storage_mode(cm.StorageMode.save)
+        oq = cm.OutputQuantities()
+        oq.add_quantities(quantities or DEFAULT_QUANTITIES)
+        var.set_outputquantities(oq)
+        var.set_initial_realtimefactor(_speed(realtime_factor))
+        return var
+
+    def rerun(self, instance: str, testrun: str, overrides: dict[str, Any] | None = None,
+              quantities: list[str] | None = None, realtime_factor: float | None = None) -> dict:
+        """Run a test run on a program this server launched, after its last run has ended. The program
+        and its IPGMovie stay as they are: a study shown in IPGMovie keeps one window for all runs."""
+        inst = self._inst(instance)
+        if inst.kind != "launched":
+            raise BackendError(f"{instance} was attached, not launched by this server")
+        if not inst.finished.is_set():
+            raise BackendError(f"{instance} is still running")
+        if not (inst.pid and _alive(inst.pid)):
+            raise BackendError(f"the program of {instance} has ended")
+        proj = self._project_path(None)
+
+        async def go():
+            var = self._variation(proj, testrun, overrides, quantities, realtime_factor)
+            inst.var, inst.testrun, inst.stop_reason = var, testrun, None
+            inst.finished = asyncio.Event()
+            inst.sc.set_variation(var)
+            await inst.sc.start_sim()
+            self._watch(inst)
+            self._arm_stop(inst)
+            return inst
+
+        self._call(go, 60)
+        return {"instance": inst.id, "pid": inst.pid, "testrun": testrun, "started": True}
 
     async def _open_movie(self, inst: Instance) -> None:
         """IPGMovie connected to this program: a window that shows the run as it happens (the
@@ -345,11 +377,13 @@ class StandaloneManager:
 
     # ---- background helpers (run on the cmapi loop) ---------------------------
     def _watch(self, inst: Instance):
+        finished = inst.finished
+
         async def w():
             try:
                 await inst.sc.create_simstate_condition(self._cmapi.ConditionSimState.finished).wait()
             finally:
-                inst.finished.set()
+                finished.set()
 
         asyncio.ensure_future(w())
 
@@ -357,10 +391,12 @@ class StandaloneManager:
         if not inst.stop_after_s:
             return
 
+        finished = inst.finished
+
         async def s():
             cond = inst.sc.create_quantity_condition(lambda t: t > inst.stop_after_s, "Time")
             await cond.wait()
-            if not inst.finished.is_set():
+            if not finished.is_set():
                 inst.stop_reason = f"stopped by server at Time > {inst.stop_after_s:g} s"
                 await _maybe(inst.sc.stop_sim())
 

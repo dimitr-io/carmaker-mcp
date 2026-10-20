@@ -240,6 +240,7 @@ class StudyRunner:
         except Exception as e:  # a bug must not leave the study 'running' for ever
             st["state"], st["error"] = "failed", f"{type(e).__name__}: {e}"
         finally:
+            self._close_standalone(st)
             self.session.study_owner = None
             st["current_label"] = None
             st["finished"] = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -308,13 +309,26 @@ class StudyRunner:
         return row
 
     def _one_standalone(self, st: dict, var: dict, cancel: threading.Event) -> dict:
+        """One run on the study's program. With movie the program, and its IPGMovie window, stay
+        open from run to run (found in use: a window per run closed before anything could be seen);
+        a program that ended is replaced by a new one."""
         sa = self._standalone()
         row: dict[str, Any] = {"label": var["label"], "keys": var["keys"], "workspace": {}}
-        inst = None
+        keep = bool(st.get("movie"))
+        inst = st.get("_instance") if keep else None
         try:
             store = sorted({"Time", "Car.v", "Car.Distance", *st["quantities"]})
-            inst = sa.launch(st["testrun"], overrides=var["keys"] or None, quantities=store,
-                             movie=st.get("movie", False), realtime_factor=st.get("speed"))["instance"]
+            args = {"overrides": var["keys"] or None, "quantities": store, "realtime_factor": st.get("speed")}
+            if inst is not None:
+                try:
+                    sa.rerun(inst, st["testrun"], **args)
+                except BackendError:
+                    self._close_standalone(st)
+                    inst = None
+            if inst is None:
+                inst = sa.launch(st["testrun"], movie=keep, **args)["instance"]
+                if keep:
+                    st["_instance"] = inst
             t0 = time.time()
             while True:
                 end = sa.wait_end(inst, 2)
@@ -339,9 +353,18 @@ class StudyRunner:
         except BackendError as e:
             row["error"] = str(e)
         finally:
-            if inst is not None:
+            if inst is not None and not keep:
                 try:
                     sa.close(inst)
                 except BackendError as e:
                     row["restore_errors"] = [f"close: {e}"]
         return row
+
+    def _close_standalone(self, st: dict) -> None:
+        """Close the program a study kept open for its runs (and IPGMovie with it)."""
+        inst = st.pop("_instance", None)
+        if inst is not None:
+            try:
+                self._standalone().close(inst)
+            except BackendError:
+                pass

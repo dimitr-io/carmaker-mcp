@@ -25,6 +25,10 @@ parameters may still change between minor versions.
   of its own, so these runs could not be watched before. IPGMovie closes with the program.
 
 ### Fixed
+- A standalone study with `movie=true` started a new program and IPGMovie for every run, so the window
+  closed before anything could be seen. The study now keeps one program and one IPGMovie window for all
+  its runs (a program that ended is replaced) and closes them after the last run. Without a program
+  start per run a study is also faster.
 - `cm_edit` and `cm_restore` failed with "No shared MATLAB session" when there was no MATLAB session,
   so standalone work could not change project files. They now only refuse while a run of the MATLAB
   session is going on.

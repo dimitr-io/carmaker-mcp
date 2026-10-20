@@ -10,7 +10,8 @@ from carmaker_mcp.study import StudyRunner, check_variations
 
 class FakeStandalone:
     def __init__(self, never_ends=False):
-        self.launched, self.closed, self.controls = [], [], []
+        self.launched, self.closed, self.controls, self.reruns = [], [], [], []
+        self.dead = set()  # instances whose program has ended
         self.never_ends = never_ends
         self.stopped = False
 
@@ -28,6 +29,12 @@ class FakeStandalone:
     def control(self, action, instance):
         self.controls.append((action, instance))
         self.stopped = True
+
+    def rerun(self, instance, testrun, overrides=None, quantities=None, **kw):
+        if instance in self.dead:
+            raise BackendError(f"the program of {instance} has ended")
+        self.reruns.append((instance, overrides))
+        return {"instance": instance}
 
     def results(self, instance):
         return {"result_files": []}
@@ -136,6 +143,24 @@ def test_standalone_study(session, mock):
     assert sa.movie is True
     with pytest.raises(BackendError, match="movie is for mode 'standalone'"):
         runner.start("A", [{}], movie=True)
+
+
+def test_a_study_shown_in_ipgmovie_keeps_one_window(session):
+    """Reported from use: with a program per run, IPGMovie closed before anything could be seen."""
+    sa = FakeStandalone()
+    runner = StudyRunner(session, lambda: sa)
+    var = [{"keys": {"Driver.Acc.ayMax": a}} for a in (12, 13, 14)]
+    st = runner.wait(runner.start("A", var, mode="standalone", movie=True)["study"])
+    assert [r["end_status"] for r in st["rows"]] == ["completed"] * 3
+    assert len(sa.launched) == 1 and sa.reruns == [("sa1", {"Driver.Acc.ayMax": 13}),
+                                                  ("sa1", {"Driver.Acc.ayMax": 14})]
+    assert sa.closed == ["sa1"]  # closed once, after the last run
+
+    sa2 = FakeStandalone()
+    sa2.dead = {"sa1"}  # the program ended (a fatal error): the next run gets a new one
+    runner = StudyRunner(session, lambda: sa2)
+    st = runner.wait(runner.start("A", var[:2], mode="standalone", movie=True)["study"])
+    assert len(sa2.launched) == 2 and sa2.closed == ["sa1", "sa2"]
 
 
 def test_standalone_study_cancel(session):
