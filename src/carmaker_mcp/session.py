@@ -147,13 +147,17 @@ class Session:
             out["save_mode"] = vals[1]
         return out
 
-    def require_idle(self, what: str) -> Status:
+    def require_idle(self, what: str, files_only: bool = False) -> Status:
+        """``files_only``: the action touches project files only, so a missing MATLAB session is no
+        reason to refuse it (no run of that session can be going on); used for standalone work."""
         if self.study_owner not in (None, threading.get_ident()):
             raise BackendError(f"cannot {what} while a parameter study is running "
                                "(cm_study_status, cm_study_wait, cm_study_cancel)")
         self._refuse_foreign_study(what)
         st = self.backend.status()
         if not st.connected:
+            if files_only:
+                return st
             raise BackendError(f"cannot {what}: CarMaker not reachable ({st.extra.get('error')})")
         if not st.idle:
             raise BackendError(f"cannot {what} while the simulation state is '{st.sim_status_text}'")
@@ -602,7 +606,7 @@ class Session:
     # ---- project files -----------------------------------------------------
     @_locked
     def edit_file(self, kind: str, name: str, overrides: dict[str, Any]) -> dict:
-        self.require_idle("edit project files")
+        self.require_idle("edit project files", files_only=True)
         return self.project.edit(kind, name, overrides)
 
     @_locked
@@ -1011,7 +1015,7 @@ class Session:
     def restore(self, session: str) -> dict:
         """Restore files from the backups of an earlier session (files only)."""
         self._ensure()
-        self.require_idle("restore files")
+        self.require_idle("restore files", files_only=True)
         res = self.store.restore_files(session)
         self.store.log("restore", session, **res)
         return res

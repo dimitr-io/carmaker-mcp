@@ -2,6 +2,7 @@ import json
 
 import pytest
 
+from carmaker_mcp.backend import BackendError
 from carmaker_mcp.guard import GuardError
 from carmaker_mcp.project import ProjectError
 
@@ -12,6 +13,15 @@ def test_list_hides_tmp_and_hidden(session):
     assert p.list("testrun", include_hidden=True)["names"] == [".Hidden/Run2", "Sub/Run1"]
     assert p.list("testrun", pattern="sub/*")["names"] == ["Sub/Run1"]
     assert p.list("vehicle")["names"] == ["Test_Vehicle"]
+
+
+def test_files_can_be_edited_without_a_matlab_session(session, mock):
+    """Reported from use: standalone work, and every cm_edit failed with 'No shared MATLAB session'."""
+    mock.connected = False
+    r = session.edit_file("vehicle", "Test_Vehicle", {"Body.mass": 300})
+    assert r["changed"]
+    with pytest.raises(BackendError, match="CarMaker not reachable"):
+        session.load_testrun("Sub/Run1")  # what needs the session still says so
 
 
 def test_read_filters(session):

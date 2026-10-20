@@ -26,6 +26,7 @@ class MockBackend:
         self.dva: list[tuple] = []
         self.popup_timeout = -1.0
         self.save_mode = "collect"  # GUI storage mode
+        self.connected = True  # False: no MATLAB session (standalone work only)
         self.time_acc = 1.0  # GUI simulation speed (999999 is "max")
         self.gui_all_saved = True
         self.last_result = ""  # what GetLastResultFName answers
@@ -47,6 +48,8 @@ class MockBackend:
             self._polls += 1
             if self._polls >= self.polls_until_idle:
                 self.sim_status, self.simstate, self.end_status = IDLE, "terminated", "completed"
+        if not self.connected:
+            return Status(connected=False, extra={"error": "No shared MATLAB session named 'cm_mcp'."})
         return Status(
             connected=True, sim_status=self.sim_status, sim_status_text=sim_status_text(self.sim_status),
             simstate=self.simstate, end_status=self.end_status, active_model="mdl",

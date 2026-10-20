@@ -22,6 +22,9 @@ parameters may still change between minor versions.
   of its own, so these runs could not be watched before. IPGMovie closes with the program.
 
 ### Fixed
+- `cm_edit` and `cm_restore` failed with "No shared MATLAB session" when there was no MATLAB session,
+  so standalone work could not change project files. They now only refuse while a run of the MATLAB
+  session is going on.
 - A standalone program whose run stopped with an error at its start stayed running after
   `cm_standalone_close` (and after a study row), holding a CarMaker licence. A program the server
   started is now ended with its instance.
