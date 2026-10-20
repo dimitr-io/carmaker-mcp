@@ -16,7 +16,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import lock
+from . import lock, timing
 from .backend import BackendError
 from .results import Erg, ErgError
 from .session import Session
@@ -48,10 +48,10 @@ def check_variations(variations: list[dict[str, Any]], mode: str) -> list[dict[s
     return out
 
 
-_ROW = ("label", "valid", "abort_reason", "vehicle", "driver_template", "driver", "end_status", "sim_time_s",
-        "distance_m", "wall_s", "splits", "result_file", "logs_file", "stopped", "error", "logs_error",
-        "log_errors", "log_warnings", "restore_errors", "missing_quantities", "result_error", "gates_error",
-        "kept_open")
+_ROW = ("label", "valid", "abort_reason", "vehicle", "driver_template", "driver", "end_status",
+        "sim_time_s", "distance_m", "wall_s", "sectors", "splits", "gates_on",
+        "result_file", "logs_file", "stopped", "error", "logs_error", "log_errors", "log_warnings",
+        "restore_errors", "missing_quantities", "result_error", "gates_error", "kept_open")
 _STATS = ("min", "max", "mean", "last")
 
 
@@ -83,7 +83,7 @@ class StudyRunner:
     def start(self, testrun: str, variations: list[dict[str, Any]], quantities: list[str] | None = None,
               mode: str = "auto", scope: str = "base", max_run_s: float = 900.0,
               save_logs: bool = False, movie: bool = False, speed: float | None = None,
-              gates: list[float] | None = None, keep_open: bool = False) -> dict:
+              gates: list[float] | str | None = None, keep_open: bool = False) -> dict:
         if mode == "auto":  # found in use: cm4sl as the default failed where only standalone was ready
             try:
                 mode = "cm4sl" if self.session.backend.status().connected else "standalone"
@@ -97,6 +97,15 @@ class StudyRunner:
         if save_logs and mode != "cm4sl":
             raise BackendError("save_logs needs the MATLAB-connected session (mode 'cm4sl')")
         runs = check_variations(variations, mode)
+        markers = None
+        if gates == "markers":  # the test run's trigger points, as the CarMaker instrument times them
+            markers = timing.trigger_markers(self.session.project.read("testrun", testrun,
+                                                                         max_items=100000)["values"])
+            if not any(m["mode"] in (2, 3) for m in markers):
+                raise BackendError(f"{testrun} has no trigger point markers that take a time (mode 2 or 3)")
+            gates = None
+        elif isinstance(gates, str):
+            raise BackendError("gates is a list of road positions in m, or 'markers'")
         template = self._driver_template(testrun)
         for v in runs:
             if v["driver"] and v["keys"].get(_TEMPLATE, template) in (None, "", "TestRun"):
@@ -125,7 +134,7 @@ class StudyRunner:
                 "id": sid, "state": "running", "testrun": testrun, "mode": mode, "scope": scope,
                 "quantities": list(quantities or DEFAULT_QUANTITIES), "max_run_s": max_run_s,
                 "save_logs": bool(save_logs), "movie": bool(movie), "speed": speed,
-                "gates": [float(g) for g in gates or []], "driver_template": template,
+                "gates": [float(g) for g in gates or []], "markers": markers, "driver_template": template,
                 "keep_open": bool(keep_open and movie), "vehicle": self._vehicle(testrun),
                 "started": time.strftime("%Y-%m-%d %H:%M:%S"), "total": len(runs), "current": 0,
                 "current_label": None, "rows": [], "variations": runs,
@@ -262,15 +271,25 @@ class StudyRunner:
         """The run completed and, with gates, passed every gate."""
         if row.get("end_status") != "completed" or row.get("error"):
             return False
+        if st.get("markers"):
+            return bool(row.get("sectors")) and all(s["time"] is not None for s in row["sectors"])
         return not st.get("gates") or (bool(row.get("splits")) and None not in row["splits"])
 
     def _gates(self, row: dict, st: dict) -> None:
-        """Times between gate distances along the course (Car.Distance), for lap and sector times."""
-        if not st.get("gates") or not row.get("result_file"):
+        """Lap and sector times: between gate positions, or at the test run's trigger point markers.
+        Timed on the road position Vhcl.sRoad when the file holds it (the odometer reads long)."""
+        if not (st.get("gates") or st.get("markers")) or not row.get("result_file"):
             return
         try:
-            c = Erg(Path(row["result_file"])).crossings("Car.Distance", st["gates"])
+            erg = Erg(Path(row["result_file"]))
+            if st.get("markers"):
+                t = timing.sector_times(erg, st["markers"])
+                row["sectors"], row["gates_on"] = t["sectors"], t["on"]
+                return
+            on = "Vhcl.sRoad" if "Vhcl.sRoad" in erg.names else "Car.Distance"
+            c = erg.crossings(on, st["gates"], "rising")
             row["splits"] = [None if b is None else round(b, 4) for b in c["between_first"]]
+            row["gates_on"] = on
         except (ErgError, OSError) as e:
             row["gates_error"] = str(e)
 
@@ -414,7 +433,9 @@ class StudyRunner:
         keep = bool(st.get("movie"))
         inst = st.get("_instance") if keep else None
         try:
-            store = sorted({"Time", "Car.v", "Car.Distance", *st["quantities"]})
+            timed = ["Vhcl.sRoad", "DM.TriggerPoint.Time", "DM.TriggerPoint.Id"] \
+                if st.get("gates") or st.get("markers") else []
+            store = sorted({"Time", "Car.v", "Car.Distance", *timed, *st["quantities"]})
             args = {"overrides": var["keys"] or None, "quantities": store, "realtime_factor": st.get("speed")}
             if inst is not None:
                 try:

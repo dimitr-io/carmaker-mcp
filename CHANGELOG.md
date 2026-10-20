@@ -9,6 +9,11 @@ parameters may still change between minor versions.
 ## [0.2.3] - unreleased (local build)
 
 ### Added
+- `cm_study_start(gates="markers")` times every run at the test run's trigger point markers, as CarMaker's
+  own lap timing does (the instrument's sector times): rows get `sectors`, taken from
+  `DM.TriggerPoint.Time` when the result file holds it (standalone studies store it) and otherwise from
+  the road position. Gate positions given by hand are timed on `Vhcl.sRoad` instead of the odometer
+  `Car.Distance`, which read about 15 ms long per skid pad lap.
 - `cm_results_plot` shows quantities of one or more result files in IPGControl, IPG's plotting program,
   without MATLAB: several files are overlaid, the x axis can be any quantity (for example `Car.Distance`),
   the window stays open for the user and a picture of it comes back to the agent. It drives IPGControl's

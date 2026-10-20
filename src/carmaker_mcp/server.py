@@ -856,8 +856,10 @@ def cm_study_start(
                                                  "row)")] = False,
     movie: Annotated[bool, Field(description="mode standalone: show the runs in IPGMovie")] = False,
     speed: Speed = None,
-    gates: Annotated[list[float] | None, Field(description="Car.Distance values in m; each row gets "
-                                                           "'splits', the times between them")] = None,
+    gates: Annotated[list[float] | Literal["markers"] | None,
+                     Field(description="'markers': each row gets 'sectors', the times at the test run's "
+                                       "trigger point markers (as CarMaker's lap timing). Or road positions "
+                                       "in m: 'splits', the times between them")] = None,
     keep_open: Annotated[bool, Field(description="With movie: leave the last run in IPGMovie (close "
                                                  "it with cm_standalone_close)")] = False,
 ) -> dict:

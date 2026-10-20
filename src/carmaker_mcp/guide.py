@@ -10,7 +10,7 @@ INSTRUCTIONS = (
     "finished=true (it returns result_file), then cm_results_summary / cm_results_read. "
     "If nothing is running yet call cm_session_start; if a run fails read cm_log and cm_popups. "
     "Typical study: cm_doctor (ready per mode), cm_read of the test run (its driver), cm_study_start "
-    "(variations, gates), cm_study_wait(until_done=true), then cm_results_crossings / cm_results_plot / "
+    "(variations, gates='markers' for lap times as CarMaker's own timing), cm_study_wait(until_done=true), then cm_results_crossings / cm_results_plot / "
     "cm_results_export. This server has no MATLAB evaluation: plot with cm_results_plot (IPGControl), or "
     "use a MATLAB server for MATLAB figures. "
     "Edits (cm_edit, cm_set_workspace_var, cm_model_set) change real project files and the live model: "
@@ -108,6 +108,11 @@ Data/Driver/Template, or is `TestRun` for the parametrization saved in the test 
   its own limit (a template per variant, or a value the user agrees to), judge only runs that ended
   `completed` by the time for the course, and report the limits used. `DM.Lap.Time` holds lap times only
   when the course is driven as laps.
+* Lap and sector times: a test run's trigger point markers (type DrivManTrigger: mode 1 starts the
+  timing, 2 takes a time, 3 does both) are how CarMaker times a course such as a skid pad; it reports
+  them as `DM.TriggerPoint.Time` and `.Id`. `cm_study_start(gates="markers")` gives each row these
+  `sectors`. Gates by hand belong on the road position `Vhcl.sRoad`: the odometer `Car.Distance` reads
+  long when the driver cuts a circle (about 15 ms per skid pad lap).
 * `Driver.Acc.GGExp` is a table, one row per speed: `vel_kmh exp_acc exp_dec`, the exponents of the
   driver's g-g diagram when accelerating and braking. 1 is an ellipse (lateral and longitudinal
   acceleration traded against each other); larger values let the driver combine more of both, which is

@@ -591,7 +591,7 @@ Run one test run several times with different parameter values, one after anothe
 | `save_logs` | boolean | `false` | After every run, save what Simulink logged and the workspaces as that run used them to a MAT file next to its result file (mode cm4sl; logs_file per row) |
 | `movie` | boolean | `false` | mode standalone: show the runs in IPGMovie |
 | `speed` | number or null | null | x real time; omit for CarMaker's maximum. Slower only if the user asks |
-| `gates` | list of number or null | null | Car.Distance values in m; each row gets 'splits', the times between them |
+| `gates` | list of number \| string or null | null | 'markers': each row gets 'sectors', the times at the test run's trigger point markers (as CarMaker's lap timing). Or road positions in m: 'splits', the times between them |
 | `keep_open` | boolean | `false` | With movie: leave the last run in IPGMovie (close it with cm_standalone_close) |
 
 ### `cm_study_status`
