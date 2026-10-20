@@ -26,6 +26,7 @@ class MockBackend:
         self.dva: list[tuple] = []
         self.popup_timeout = -1.0
         self.save_mode = "collect"  # GUI storage mode
+        self.time_acc = 1.0  # GUI simulation speed (999999 is "max")
         self.gui_all_saved = True
         self.last_result = ""  # what GetLastResultFName answers
         self.popup_msgs: list[tuple[str, str, int]] = []  # (type, text, answer) the GUI "raised"
@@ -59,6 +60,9 @@ class MockBackend:
             if arg:
                 self.popup_timeout = float(arg[0])
             return 0, f"{old:g}"
+        if command.startswith("SetSimTimeAcc "):
+            self.time_acc = float(command.split()[1])
+            return 0, ""
         if command.startswith("SaveMode "):
             self.save_mode = command.split()[1]
             return 0, ""

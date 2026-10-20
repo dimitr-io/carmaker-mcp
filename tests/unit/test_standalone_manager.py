@@ -161,6 +161,8 @@ def make_cmapi():
 
 @pytest.fixture
 def mgr(tmp_path, monkeypatch):
+    # the fake program's pid may belong to a real process here: never look at or end it
+    monkeypatch.setattr(standalone, "_alive", lambda pid: False)
     home = tmp_path / "cm"
     (home / "bin").mkdir(parents=True)
     (home / "bin" / "CarMaker.win64.exe").write_bytes(b"")
@@ -178,12 +180,12 @@ def on_loop(mgr, fn):
 
 def test_launch_run_and_results(mgr):
     r = mgr.launch("My Runs/Braking", overrides={"Vehicle.DriverTemplate.FName": "X", "Body.mass": 300},
-                   quantities=["Time", "Car.ax"], realtime_factor=10)
+                   quantities=["Time", "Car.ax"])
     st = mgr.state
     assert r["instance"] == "sa1" and r["pid"] == 4711 and r["started"] is True
     assert st.project == mgr.project and st.testrun == Path("My Runs/Braking")
     assert st.overrides == {"Vehicle.DriverTemplate.FName": "X", "Body.mass": "300"}
-    assert st.quantities == ["Time", "Car.ax"] and st.rtf == 10.0 and st.storage == "save"
+    assert st.quantities == ["Time", "Car.ax"] and st.rtf == 327.0 and st.storage == "save"
     assert st.controls == ["start_and_connect", "start"]
     assert mgr.servers()[0]["managed_by_us"] is True
 

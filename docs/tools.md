@@ -434,14 +434,13 @@ CarMaker simulation programs running on this machine (pid, description, whether 
 
 *Launch a standalone CarMaker run* · changes state
 
-Start a NEW independent CarMaker simulation program (not connected to MATLAB) and run a test run on it. Only for test runs whose vehicle does not need a Simulink controller. Results go to the project's SimOutput; see cm_standalone_results.
+Start a NEW independent CarMaker simulation program (not connected to MATLAB) and run a test run on it. Only for test runs whose vehicle does not need a Simulink controller. Results go to the project's SimOutput; see cm_standalone_results. It runs at CarMaker's maximum speed.
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
 | `testrun` | string | required | Test run relative to Data/TestRun |
 | `overrides` | object or null | null | Test-run keys to change in memory only, e.g. {'Vehicle.DriverTemplate.FName': 'X'} |
 | `quantities` | list of string or null | null | Quantities to store (default: Time, Car.v, Car.YawRate, Car.ax, Car.ay, Car.Distance) |
-| `realtime_factor` | number | `1.0` | Simulation speed relative to real time (larger is faster) |
 | `stop_after_s` | number or null | `600.0` | Safety stop at this simulation time in s (null: none) |
 | `executable` | string or null | null | CarMaker executable (default: the stock one of the install) |
 | `start` | boolean | `true` | Start the run at once |
@@ -459,7 +458,6 @@ Attach to a CarMaker simulation program that is already running, for example one
 | `testrun` | string or null | null | Test run to configure (needed to start a run) |
 | `overrides` | object or null | null | Test-run keys to change in memory only, e.g. {'Vehicle.DriverTemplate.FName': 'X'} |
 | `quantities` | list of string or null | null | Quantities to store |
-| `realtime_factor` | number | `1.0` | Speed relative to real time |
 | `stop_after_s` | number or null | `600.0` | Safety stop at this simulation time in s |
 | `start` | boolean | `false` | Start the run at once (needs testrun) |
 

@@ -8,6 +8,13 @@ parameters may still change between minor versions.
 
 ## [0.2.3] - unreleased (local build)
 
+### Changed
+- Every run goes at CarMaker's maximum speed. Before each start in the MATLAB session the server selects
+  the GUI's speed "max" (`SetSimTimeAcc 999999`). Standalone runs and studies use the largest speed IPG's
+  Python API accepts (327 x real time; 1000 overflows it, 0 pauses the run); before, they ran in real
+  time. `cm_standalone_launch` and `cm_standalone_attach` no longer take `realtime_factor`, and the server
+  instructions tell agents never to slow a run down.
+
 ### Added
 - `cm_standalone_launch(movie=true)` and `cm_study_start(mode="standalone", movie=true)` show a standalone
   run in IPGMovie, connected to that CarMaker program while it runs. A standalone program has no window

@@ -12,6 +12,8 @@ INSTRUCTIONS = (
     "Edits (cm_edit, cm_set_workspace_var, cm_model_set) change real project files and the live model: "
     "each is backed up and logged, and cm_revert_all undoes this session's changes. "
     "The simulation must be idle for loads, edits and reverts. "
+    "Every run goes at CarMaker's maximum speed, ALWAYS: the server sets it before each start (the GUI's "
+    "'max'). Never slow a run down or set it to real time; to watch a run, look at IPGMovie. "
     "The test run, not the vehicle, chooses the driver: Vehicle.DriverTemplate.FName names a template in "
     "Data/Driver/Template (or 'TestRun' for the one saved in the test run), and the driver's knowledge is "
     "learnt for one vehicle. Changing Vehicle or cloning another vehicle's test run keeps the old driver: "

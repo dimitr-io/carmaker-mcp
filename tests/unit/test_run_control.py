@@ -211,3 +211,17 @@ def test_a_folder_that_names_its_project_is_left_alone(session, mock, project, t
     (external / "cmproject.txt").write_text(str(project))
     mock.cwd, mock.project_dir = str(external), str(project)
     assert session.load_testrun("Sub/Run1") == {"loaded": "Sub/Run1"} and mock.cwd == str(external)
+
+
+def test_every_run_goes_at_max_speed(session, mock):
+    """The user's rule: runs at CarMaker's maximum speed, always (the GUI's 'max' is 999999)."""
+    mock.polls_until_idle = 2
+    session.start_sim()
+    assert mock.time_acc == 999999 and ("tcl", "SetSimTimeAcc 999999") in mock.calls
+
+
+def test_standalone_speed_is_the_maximum_the_api_takes():
+    from carmaker_mcp.standalone import MAX_REALTIME_FACTOR, _speed
+
+    assert _speed(None) == MAX_REALTIME_FACTOR == 327.0  # 1000 overflows IPG's API, 0 pauses the run
+    assert _speed(999999) == 327.0 and _speed(2) == 2.0

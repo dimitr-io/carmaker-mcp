@@ -674,8 +674,6 @@ def cm_standalone_launch(
     quantities: Annotated[list[str] | None, Field(description="Quantities to store (default: Time, Car.v, "
                                                               "Car.YawRate, Car.ax, Car.ay, "
                                                               "Car.Distance)")] = None,
-    realtime_factor: Annotated[float, Field(description="Simulation speed relative to real time "
-                                                        "(larger is faster)", gt=0)] = 1.0,
     stop_after_s: Annotated[float | None, Field(description="Safety stop at this simulation time in s "
                                                             "(null: none)")] = 600.0,
     executable: Annotated[str | None, Field(description="CarMaker executable (default: the stock one of "
@@ -686,9 +684,9 @@ def cm_standalone_launch(
 ) -> dict:
     """Start a NEW independent CarMaker simulation program (not connected to MATLAB) and run a test run
     on it. Only for test runs whose vehicle does not need a Simulink controller. Results go to the
-    project's SimOutput; see cm_standalone_results."""
-    return SA().launch(testrun, overrides=overrides, quantities=quantities, realtime_factor=realtime_factor,
-                       stop_after_s=stop_after_s, executable=executable, start=start, movie=movie)
+    project's SimOutput; see cm_standalone_results. It runs at CarMaker's maximum speed."""
+    return SA().launch(testrun, overrides=overrides, quantities=quantities, stop_after_s=stop_after_s,
+                       executable=executable, start=start, movie=movie)
 
 
 @_tool(WRITE, "Attach to a running CarMaker program")
@@ -697,15 +695,14 @@ def cm_standalone_attach(
     testrun: Annotated[str | None, Field(description="Test run to configure (needed to start a run)")] = None,
     overrides: Overrides = None,
     quantities: Annotated[list[str] | None, Field(description="Quantities to store")] = None,
-    realtime_factor: Annotated[float, Field(description="Speed relative to real time", gt=0)] = 1.0,
     stop_after_s: Annotated[float | None, Field(description="Safety stop at this simulation time "
                                                             "in s")] = 600.0,
     start: Annotated[bool, Field(description="Start the run at once (needs testrun)")] = False,
 ) -> dict:
     """Attach to a CarMaker simulation program that is already running, for example one started from a
     CarMaker Office window."""
-    return SA().attach(pid, testrun, overrides=overrides, quantities=quantities,
-                       realtime_factor=realtime_factor, stop_after_s=stop_after_s, start=start)
+    return SA().attach(pid, testrun, overrides=overrides, quantities=quantities, stop_after_s=stop_after_s,
+                       start=start)
 
 
 @_tool(READ, "Standalone instance status")

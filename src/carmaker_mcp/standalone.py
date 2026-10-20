@@ -76,6 +76,17 @@ async def _maybe(x):
     return await x if inspect.isawaitable(x) else x
 
 
+# The largest speed IPG's Python API accepts (it sends 100 x the factor as a 16-bit number). The GUI's
+# "max" sends 500; on a laptop both run the program as fast as the processor allows.
+MAX_REALTIME_FACTOR = 327.0
+
+
+def _speed(realtime_factor: float | None) -> float:
+    if realtime_factor is None:
+        return MAX_REALTIME_FACTOR
+    return min(float(realtime_factor), MAX_REALTIME_FACTOR)
+
+
 def _alive(pid: int) -> bool:
     """Whether a process with this id is running."""
     if sys.platform != "win32":
@@ -211,7 +222,7 @@ class StandaloneManager:
     def launch(
         self, testrun: str, project: str | Path | None = None, executable: str | Path | None = None,
         overrides: dict[str, Any] | None = None, quantities: list[str] | None = None,
-        realtime_factor: float = 1.0, stop_after_s: float | None = 600.0, start: bool = True,
+        realtime_factor: float | None = None, stop_after_s: float | None = 600.0, start: bool = True,
         movie: bool = False,
     ) -> dict:
         proj = self._project_path(project)
@@ -232,7 +243,7 @@ class StandaloneManager:
             oq = cm.OutputQuantities()
             oq.add_quantities(quantities or DEFAULT_QUANTITIES)
             var.set_outputquantities(oq)
-            var.set_initial_realtimefactor(float(realtime_factor))
+            var.set_initial_realtimefactor(_speed(realtime_factor))
             master = cm.CarMaker()
             master.set_executable_path(exe)
             sc = cm.SimControlInteractive()
@@ -275,7 +286,7 @@ class StandaloneManager:
 
     def attach(self, pid: int, testrun: str | None = None, project: str | Path | None = None,
                overrides: dict[str, Any] | None = None, quantities: list[str] | None = None,
-               realtime_factor: float = 1.0, stop_after_s: float | None = 600.0,
+               realtime_factor: float | None = None, stop_after_s: float | None = 600.0,
                start: bool = False) -> dict:
         """Attach to a CarMaker simulation program that is already running (for example one a
         CarMaker Office window started). If ``testrun`` is given the run can be started."""
@@ -295,7 +306,7 @@ class StandaloneManager:
                 oq = cm.OutputQuantities()
                 oq.add_quantities(quantities or DEFAULT_QUANTITIES)
                 var.set_outputquantities(oq)
-                var.set_initial_realtimefactor(float(realtime_factor))
+                var.set_initial_realtimefactor(_speed(realtime_factor))
             master = cm.ApoServer()
             master.set_sinfo(cm.ApoServerInfo(pid=int(pid)))
             master.set_host("localhost")

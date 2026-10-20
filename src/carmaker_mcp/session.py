@@ -216,6 +216,7 @@ class Session:
         self._popups_begin()
         if save != "keep":
             self._set_save_mode(save)
+        self._max_speed()
         self._log_mark = self._mark_log()
         self._run_started = time.time()
         self._simulink_error(clear=True)
@@ -342,6 +343,13 @@ class Session:
             return self.save_mode()
         except BackendError:
             return None
+
+    def _max_speed(self) -> None:
+        """Runs go as fast as CarMaker can: the GUI's speed "max" (its value 999999)."""
+        try:
+            self._tcl("SetSimTimeAcc 999999")
+        except BackendError as e:
+            _log.warning("could not set the simulation speed to max: %s", e)
 
     def _set_save_mode(self, mode: str) -> None:
         old = self._save_mode_quiet()
