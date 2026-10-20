@@ -49,7 +49,7 @@ def test_kind_enum_matches_the_project_kinds():
 
 def test_tool_list_stays_small():
     """tools/list is sent to the model in every conversation: keep an eye on its size."""
-    for mcp, budget in ((server.create_server(), 49_000), (FULL, 55_000)):
+    for mcp, budget in ((server.create_server(), 52_000), (FULL, 58_000)):
         blob = json.dumps([dump(t) for t in with_client(lambda c: c.list_tools(), mcp)])
         assert len(blob) < budget, f"tools/list grew to {len(blob)} bytes"
 

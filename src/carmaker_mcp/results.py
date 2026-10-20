@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import fnmatch
 import math
+import re
+import struct
 import time
 from pathlib import Path
 
@@ -95,15 +97,7 @@ class Erg:
         self, names: list[str], t_min: float | None = None, t_max: float | None = None,
         max_points: int = 500,
     ) -> dict:
-        idx = np.arange(self.n_rows)
-        if (t_min is not None or t_max is not None) and "Time" in self.names:
-            t = self.column("Time")
-            m = np.ones(self.n_rows, dtype=bool)
-            if t_min is not None:
-                m &= t >= t_min
-            if t_max is not None:
-                m &= t <= t_max
-            idx = idx[m]
+        idx = self._window(t_min, t_max)
         stride = max(1, math.ceil(len(idx) / max(1, max_points)))
         idx = idx[::stride]
         cols = {n: _clean(self.column(n)[idx]) for n in names}
@@ -129,6 +123,102 @@ class Erg:
             }
         t_end = float(self.column("Time")[-1]) if "Time" in self.names and self.n_rows else None
         return {"file": self.path.name, "rows": self.n_rows, "duration_s": t_end, "quantities": out}
+
+
+    def _window(self, t_min: float | None, t_max: float | None) -> np.ndarray:
+        idx = np.arange(self.n_rows)
+        if (t_min is not None or t_max is not None) and "Time" in self.names:
+            t = self.column("Time")
+            m = np.ones(self.n_rows, dtype=bool)
+            if t_min is not None:
+                m &= t >= t_min
+            if t_max is not None:
+                m &= t <= t_max
+            idx = idx[m]
+        return idx
+
+    def export(self, target: Path, names: list[str], t_min: float | None = None,
+               t_max: float | None = None) -> dict:
+        """Write quantities at full resolution to a .mat (MATLAB 5 format, one variable per quantity,
+        dots in names become underscores, plus ``quantity_names`` and ``units``) or a .csv file."""
+        fmt = target.suffix.lower()
+        if fmt not in (".mat", ".csv"):
+            raise ErgError("the file must end in .mat or .csv")
+        if target.exists():
+            raise ErgError(f"{target} exists; refusing to overwrite")
+        if not target.parent.is_dir():
+            raise ErgError(f"folder {target.parent} does not exist")
+        for n in names:
+            self.column(n)  # unknown names fail here, before anything is written
+        # Result files hold padding columns of bytes ('$none$'): they are no quantities.
+        skipped = [n for n in names if self.dtype[n].kind in "SUV"]
+        names = [n for n in names if n not in skipped]
+        idx = self._window(t_min, t_max)
+        cols = {n: np.asarray(self.column(n)[idx], dtype=float) for n in names}
+        units = [self.units.get(n, "") for n in names]
+        if fmt == ".csv":
+            head = ",".join(f"{n} [{u}]" if u else n for n, u in zip(names, units, strict=True))
+            table = np.column_stack([cols[n] for n in names]) if names else np.empty((len(idx), 0))
+            np.savetxt(target, table, delimiter=",", header=head, comments="", fmt="%.10g")
+        else:
+            target.write_bytes(_mat5({**{_mat_name(n): cols[n] for n in names}},
+                                     {"quantity_names": names, "units": units}))
+        return {"file": str(target), "format": fmt[1:], "rows": len(idx), "quantities": names,
+                "units": dict(zip(names, units, strict=True)),
+                "variables": {n: _mat_name(n) for n in names} if fmt == ".mat" else None,
+                "skipped": skipped or None}
+
+    def crossings(self, name: str, values: list[float], direction: str = "any", limit: int = 20) -> dict:
+        """Times (linearly interpolated) at which a quantity reaches each value; for a distance
+        quantity these are gate times. ``direction``: any, rising or falling."""
+        if direction not in ("any", "rising", "falling"):
+            raise ErgError("direction must be any, rising or falling")
+        x = self.column(name).astype(float)
+        t = self.column("Time").astype(float)
+        out = []
+        for v in values:
+            a, b = x[:-1] - v, x[1:] - v
+            hit = (a <= 0) & (b > 0) if direction == "rising" else (a >= 0) & (b < 0) \
+                if direction == "falling" else ((a <= 0) & (b > 0)) | ((a >= 0) & (b < 0))
+            times = []
+            for i in np.flatnonzero(hit)[:limit]:
+                f = 0.0 if x[i + 1] == x[i] else (v - x[i]) / (x[i + 1] - x[i])
+                times.append(float(t[i] + f * (t[i + 1] - t[i])))
+            out.append({"value": v, "times": times, "first": times[0] if times else None})
+        firsts = [c["first"] for c in out]
+        pairs = zip(firsts[:-1], firsts[1:], strict=True)
+        between = [None if a is None or b is None else b - a for a, b in pairs]
+        return {"file": self.path.name, "quantity": name, "unit": self.units.get(name, ""),
+                "range": [_num(np.nanmin(x)), _num(np.nanmax(x))] if len(x) else None,
+                "crossings": out, "between_first": between}
+
+
+def _mat_name(name: str) -> str:
+    s = re.sub(r"\W", "_", name)
+    return ("q_" + s if not s[:1].isalpha() else s)[:63]
+
+
+def _mat5(arrays: dict[str, np.ndarray], texts: dict[str, list[str]]) -> bytes:
+    """A MATLAB 5 MAT file: double column vectors and char matrices (one row per string)."""
+    def element(kind: int, data: bytes) -> bytes:
+        return struct.pack("<II", kind, len(data)) + data + b"\0" * (-len(data) % 8)
+
+    def matrix(name: str, cls: int, dims: tuple[int, int], body: bytes) -> bytes:
+        inner = (element(6, struct.pack("<II", cls, 0)) + element(5, struct.pack("<ii", *dims))
+                 + element(1, name.encode("ascii")) + body)
+        return element(14, inner)
+
+    out = b"MATLAB 5.0 MAT-file, written by carmaker-mcp".ljust(116) + b"\0" * 8
+    out += struct.pack("<H", 0x0100) + b"IM"  # version, little endian
+    for name, a in arrays.items():
+        a = np.ascontiguousarray(a, dtype="<f8")
+        out += matrix(name, 6, (len(a), 1), element(9, a.tobytes()))
+    for name, rows in texts.items():
+        width = max((len(r) for r in rows), default=0)
+        grid = np.array([[ord(c) for c in r.ljust(width)] for r in rows] or [[]], dtype="<u2")
+        grid = grid.reshape(len(rows), width)
+        out += matrix(name, 4, (len(rows), width), element(4, grid.flatten(order="F").tobytes()))
+    return out
 
 
 def _num(x) -> float | None:

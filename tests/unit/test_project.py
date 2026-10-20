@@ -111,3 +111,8 @@ def test_log_is_valid_jsonl(session):
     session.project.edit("vehicle", "Test_Vehicle", {"Body.mass": 1})
     for line in session.store.log_path.read_text().splitlines():
         assert json.loads(line)["session"] == "t1"
+
+
+def test_clone_answers_with_the_name_cm_list_uses(session):
+    r = session.clone_file("vehicle", "Test_Vehicle", "Sub/Copy")
+    assert r["name"] == "Sub/Copy" and r["created"].endswith("Data/Vehicle/Sub/Copy")

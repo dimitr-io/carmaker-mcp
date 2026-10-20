@@ -194,6 +194,34 @@ Time series from a result file, decimated to at most max_points samples.
 | `t_max` | number or null | null | End of the time window in s |
 | `max_points` | integer | `500` | Samples are thinned to at most this many per quantity |
 
+### `cm_results_crossings`
+
+*Times at which a quantity reaches values* · read-only
+
+Interpolated times at which a quantity crosses each value, and the time between the first crossings of consecutive values (lap or sector times from distance gates).
+
+| Parameter | Type | Default | Meaning |
+|---|---|---|---|
+| `erg` | string | required | Result file (.erg): absolute path, or relative to the project |
+| `quantity` | string | required | e.g. 'Car.Distance' for gates along the course |
+| `values` | list of number | required | Values to find, e.g. gate distances in m |
+| `direction` | `any` \| `rising` \| `falling` | `"any"` | Which crossings |
+
+### `cm_results_export`
+
+*Export a result file* · changes state
+
+Write quantities of a result file at full resolution (no thinning) to a MAT file (one double variable per quantity, dots as underscores, plus quantity_names and units) or a CSV file. Never overwrites.
+
+| Parameter | Type | Default | Meaning |
+|---|---|---|---|
+| `erg` | string | required | Result file (.erg): absolute path, or relative to the project |
+| `quantities` | list of string or null | null | Default: all |
+| `t_min` | number or null | null | Start of the time window in s |
+| `t_max` | number or null | null | End of the time window in s |
+| `file` | string or null | null | Target .mat or .csv (absolute, or relative to the result file's folder); default next to it |
+| `format` | `mat` \| `csv` | `"mat"` | When file is not given |
+
 ### `cm_output_quantities`
 
 *Read the output quantities* · read-only

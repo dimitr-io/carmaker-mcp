@@ -21,6 +21,7 @@ def test_read_names_the_driver_and_where_its_limits_are(session, project):
     d = session.project.read("testrun", "Sub/Own")["driver"]
     assert d["defined_in"] == "driver Template/Fast"
     assert d["values"] == {"Driver.Acc.ayMax": "15.8", "Driver.Long.dtAccBrake": "0.01"}
+    assert d["unused_testrun_values"] == {"Driver.Acc.ayMax": "12"}  # the test run's own value, not used
     session.edit_file("testrun", "Sub/Own", {"Vehicle.DriverTemplate.FName": "Gone"})
     d = session.project.read("testrun", "Sub/Own")["driver"]
     assert d["defined_in"] is None and "no driver template 'Gone'" in d["note"] and d["values"] == {}

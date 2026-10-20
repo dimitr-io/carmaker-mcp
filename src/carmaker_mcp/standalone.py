@@ -144,6 +144,8 @@ class Instance:
     finished: Any = None  # asyncio.Event set by the watcher
     stop_reason: str | None = None
     movie: Any = None  # IPGMovie showing this program, if one was started for it
+    project: Path | None = None
+    log_mark: Any = None  # session log position at the start of the current run
 
 
 class StandaloneManager:
@@ -249,7 +251,7 @@ class StandaloneManager:
                 await self._abandon(sc, master)
                 raise BackendError(_launch_failure(e, sessionlog.since(proj, mark))) from e
             inst = Instance(iid, "launched", sc, master, var, master.get_pid(), testrun,
-                            stop_after_s=stop_after_s, finished=asyncio.Event())
+                            stop_after_s=stop_after_s, finished=asyncio.Event(), project=proj, log_mark=mark)
             self.instances[iid] = inst
             self._watch(inst)
             if movie:
@@ -299,6 +301,7 @@ class StandaloneManager:
             var = self._variation(proj, testrun, overrides, quantities, realtime_factor)
             inst.var, inst.testrun, inst.stop_reason = var, testrun, None
             inst.finished = asyncio.Event()
+            inst.project, inst.log_mark = proj, sessionlog.mark(proj)
             inst.sc.set_variation(var)
             await inst.sc.start_sim()
             self._watch(inst)
@@ -454,18 +457,30 @@ class StandaloneManager:
             except _TIMEOUTS:
                 return {"instance": inst.id, "finished": False, "timeout_s": timeout_s}
             info = inst.var.get_simend_info() if inst.var is not None else None
-            return {
+            out = {
                 "instance": inst.id, "finished": True, "stop_reason": inst.stop_reason,
                 "sim_time_s": getattr(info, "sim_time", None), "sim_dist_m": getattr(info, "sim_dist", None),
                 "error_flag": getattr(info, "error_flag", None),
                 "user_stop": getattr(info, "user_stop", None),
-                "log_errors": [
-                    str(e).split("Message: ", 1)[-1][:200]
-                    for e in inst.sc.sessionlog.get_entries_with_pattern("*ERROR*")[-10:]
-                ],
             }
+            out.update(self._run_log(inst))
+            return out
 
         return self._call(go, timeout_s + 15)
+
+    def _run_log(self, inst: Instance) -> dict:
+        """Errors and warnings of the current run, from the project's session log (found in use: an
+        aborted run often came back without a reason)."""
+        if inst.project is not None and inst.log_mark is not None:
+            lines = sessionlog.since(inst.project, inst.log_mark)
+            errors = sessionlog.dedupe(sessionlog.filter_level(lines, "error"))
+            out: dict[str, list[str]] = {"log_errors": errors}
+            warns = sessionlog.dedupe(sessionlog.warnings_only(lines), 5)
+            if warns:
+                out["log_warnings"] = warns
+            return out
+        return {"log_errors": [str(e).split("Message: ", 1)[-1][:200]  # attached: its own log only
+                               for e in inst.sc.sessionlog.get_entries_with_pattern("*ERROR*")[-10:]]}
 
     def dva_write(self, name: str, value: float, duration_ms: int = -1, instance: str | None = None) -> dict:
         inst = self._inst(instance)

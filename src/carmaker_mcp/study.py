@@ -44,8 +44,9 @@ def check_variations(variations: list[dict[str, Any]], mode: str) -> list[dict[s
     return out
 
 
-_ROW = ("label", "end_status", "sim_time_s", "distance_m", "result_file", "logs_file", "stopped", "error",
-        "logs_error", "log_errors", "log_warnings", "restore_errors", "missing_quantities", "result_error")
+_ROW = ("label", "end_status", "sim_time_s", "distance_m", "wall_s", "result_file", "logs_file", "stopped",
+        "error", "logs_error", "log_errors", "log_warnings", "restore_errors", "missing_quantities",
+        "result_error")
 _STATS = ("min", "max", "mean", "last")
 
 
@@ -286,6 +287,7 @@ class StudyRunner:
                       "log_errors", "log_warnings", "popups"):
                 if end.get(k) is not None:
                     row[k] = end[k]
+            row["wall_s"] = round(time.time() - t0, 1)
             self._summarise(row, st)
         except BackendError as e:
             row["error"] = str(e)
@@ -345,8 +347,10 @@ class StudyRunner:
                              ("error_flag", "error_flag"), ("stop_reason", "stop_reason")):
                 if end.get(src) is not None:
                     row[dst] = end[src]
-            if end.get("log_errors"):
-                row["log_errors"] = end["log_errors"]
+            row["wall_s"] = round(time.time() - t0, 1)
+            for k in ("log_errors", "log_warnings"):
+                if end.get(k):
+                    row[k] = end[k]
             files = sa.results(inst).get("result_files") or []
             row["result_file"] = files[-1] if files else None
             self._summarise(row, st)

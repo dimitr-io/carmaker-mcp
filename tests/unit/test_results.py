@@ -61,3 +61,34 @@ def test_list_results_skips_modelcheck(tmp_path):
     make_erg(mc, name="check.erg")
     names = [r["name"] for r in list_results([tmp_path])]
     assert names == ["a.erg"]
+
+
+def test_export_full_resolution_to_csv_and_mat(tmp_path):
+    """Asked for in use: cm_results_read thins to 5000 points and there was no way to a .mat file."""
+    e = Erg(make_erg(tmp_path, n=8000))
+    r = e.export(tmp_path / "out.csv", ["Time", "Car.v"], t_min=10.0)
+    assert r["rows"] == 7000 and r["units"] == {"Time": "s", "Car.v": "m/s"}
+    lines = (tmp_path / "out.csv").read_text().splitlines()
+    assert lines[0] == "Time [s],Car.v [m/s]" and len(lines) == 7001 and lines[1].startswith("10,")
+    with pytest.raises(ErgError, match="refusing to overwrite"):
+        e.export(tmp_path / "out.csv", ["Time"])
+    with pytest.raises(ErgError, match="no quantity"):
+        e.export(tmp_path / "x.mat", ["Nope"])
+    assert not (tmp_path / "x.mat").exists()
+
+    r = e.export(tmp_path / "out.mat", ["Time", "Car.v"])
+    assert r["variables"] == {"Time": "Time", "Car.v": "Car_v"} and r["rows"] == 8000
+    sio = pytest.importorskip("scipy.io")
+    m = sio.loadmat(tmp_path / "out.mat")
+    assert m["Car_v"].shape == (8000, 1) and m["Car_v"][-1, 0] == pytest.approx(10.0)
+    assert [s.strip() for s in m["quantity_names"]] == ["Time", "Car.v"]
+    assert [s.strip() for s in m["units"]] == ["s", "m/s"]
+
+
+def test_crossings_give_gate_times(tmp_path):
+    """Asked for in use: lap times from distance gates needed hand-made interpolation."""
+    e = Erg(make_erg(tmp_path))  # Car.v rises linearly from 0 to 10 over 0.99 s
+    r = e.crossings("Car.v", [2.5, 5.0, 20.0])
+    assert r["crossings"][0]["first"] == pytest.approx(0.2475) and r["crossings"][2]["times"] == []
+    assert r["between_first"][0] == pytest.approx(0.2475) and r["between_first"][1] is None
+    assert e.crossings("Car.v", [5.0], direction="falling")["crossings"][0]["times"] == []

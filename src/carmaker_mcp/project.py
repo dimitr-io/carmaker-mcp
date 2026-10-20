@@ -113,6 +113,8 @@ class Project:
             "kind": kind, "name": name, "infofile": True, "total_keys": total,
             "returned": len(items), "values": items,
         }
+        if total > len(items):
+            out["note"] = f"showing {len(items)} of {total} keys: filter with keys or prefix"
         if kind == "testrun":
             out["driver"] = self.driver(info.to_dict())
         return out
@@ -144,6 +146,11 @@ class Project:
         else:
             out["defined_in"] = "this test run"
         out["values"] = {k: source[k] for k in DRIVER_KEYS if k in source}
+        if source is not testrun:
+            # Observed: with a template named, these keys of the test run itself changed nothing.
+            own = {k: testrun[k] for k in DRIVER_KEYS if k in testrun and testrun[k] != source.get(k)}
+            if own:
+                out["unused_testrun_values"] = own
         return {k: v for k, v in out.items() if v is not None or k == "defined_in"}
 
     # ---- editing -----------------------------------------------------------
@@ -225,7 +232,8 @@ class Project:
         self.store.record_created(dst)
         rel = self.guard.relative(dst)
         self.store.log("file_create", rel, source=self.guard.relative(src))
-        out: dict[str, Any] = {"created": rel, "from": self.guard.relative(src)}
+        out: dict[str, Any] = {"created": rel, "name": new_name.replace("\\", "/").strip("/"),
+                               "from": self.guard.relative(src)}
         if kind == "testrun":
             info = InfoFile.load(dst)
             if info.is_infofile:

@@ -405,7 +405,10 @@ def cm_results_summary(
     e = S().erg(erg)
     if search:
         hits = e.search(search, None)
-        return {"matches": hits[:300], "n_matches": len(hits), "n_quantities": len(e.names)}
+        out = {"matches": hits[:300], "n_matches": len(hits), "n_quantities": len(e.names)}
+        if not hits:
+            out["quantities_in_file"] = e.names[:200]  # a run stores only its output quantities
+        return out
     return e.summary(quantities or [n for n in ("Time", "Car.v") if n in e.names])
 
 
@@ -420,6 +423,38 @@ def cm_results_read(
 ) -> dict:
     """Time series from a result file, decimated to at most max_points samples."""
     return S().erg(erg).read(quantities, t_min, t_max, max_points)
+
+
+@_tool(WRITE, "Export a result file")
+def cm_results_export(
+    erg: ErgPath,
+    quantities: Annotated[list[str] | None, Field(description="Default: all")] = None,
+    t_min: Annotated[float | None, Field(description="Start of the time window in s")] = None,
+    t_max: Annotated[float | None, Field(description="End of the time window in s")] = None,
+    file: Annotated[str | None, Field(description="Target .mat or .csv (absolute, or relative to the "
+                                                   "result file's folder); default next to it")] = None,
+    format: Annotated[Literal["mat", "csv"], Field(description="When file is not given")] = "mat",
+) -> dict:
+    """Write quantities of a result file at full resolution (no thinning) to a MAT file (one double
+    variable per quantity, dots as underscores, plus quantity_names and units) or a CSV file. Never
+    overwrites."""
+    return S().results_export(erg, quantities, t_min, t_max, file, format)
+
+
+@_tool(READ, "Times at which a quantity reaches values")
+def cm_results_crossings(
+    erg: ErgPath,
+    quantity: Annotated[str, Field(description="e.g. 'Car.Distance' for gates along the course")],
+    values: Annotated[list[float], Field(description="Values to find, e.g. gate distances in m",
+                                         min_length=1, max_length=100)],
+    direction: Annotated[Literal["any", "rising", "falling"], Field(description="Which crossings")] = "any",
+) -> dict:
+    """Interpolated times at which a quantity crosses each value, and the time between the first
+    crossings of consecutive values (lap or sector times from distance gates)."""
+    try:
+        return S().erg(erg).crossings(quantity, values, direction)
+    except ErgError as e:
+        raise BackendError(str(e)) from e
 
 
 @_tool(READ, "Read the output quantities")

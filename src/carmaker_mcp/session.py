@@ -20,7 +20,7 @@ from .guard import GuardError, PathGuard, is_within
 from .infofile import InfoFile
 from .movie import MOVIE_EXE, Movie, missing_quantities, missing_size
 from .project import Project, ProjectError
-from .results import Erg, list_results
+from .results import Erg, ErgError, list_results
 from .state import StateStore
 from .wincapture import CaptureError, capture_window
 
@@ -830,6 +830,17 @@ class Session:
         if not p.is_absolute():
             p = self.project.root / p
         return Erg(p)
+
+    def results_export(self, erg: str, quantities: list[str] | None, t_min: float | None,
+                       t_max: float | None, file: str | None, fmt: str) -> dict:
+        e = self.erg(erg)
+        target = Path(file) if file else e.path.with_suffix(f".{fmt}")
+        if not target.is_absolute():
+            target = e.path.parent / target
+        try:
+            return e.export(target, quantities or list(e.names), t_min, t_max)
+        except ErgError as err:
+            raise BackendError(str(err)) from err
 
     # ---- output quantities ---------------------------------------------------
     def _outquants_file(self) -> str:

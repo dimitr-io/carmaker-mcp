@@ -8,7 +8,24 @@ parameters may still change between minor versions.
 
 ## [0.2.3] - unreleased (local build)
 
+### Added
+- `cm_results_export` writes quantities of a result file at full resolution, optionally in a time window,
+  to a MAT file (one double variable per quantity, plus `quantity_names` and `units`) or a CSV file.
+- `cm_results_crossings` gives the interpolated times at which a quantity reaches given values and the
+  time between them, for example lap or sector times from `Car.Distance` gates.
+- Study rows report `wall_s`. Standalone runs and study rows report the errors and warnings of that run
+  from the session log, so an aborted run says why.
+- `cm_doctor` returns `ready` (`cm4sl`, `standalone`): a missing MATLAB session no longer makes standalone
+  work look broken.
+- `cm_read` says when it shows only part of a file, and `driver` lists `unused_testrun_values`: the test
+  run's own driver values that differ from the template it names.
+- `cm_standalone_launch(movie=true)` and `cm_study_start(mode="standalone", movie=true)` show a standalone
+  run in IPGMovie, connected to that CarMaker program while it runs. A standalone program has no window
+  of its own, so these runs could not be watched before. IPGMovie closes with the program.
+
 ### Changed
+- `cm_clone` also returns the new file's `name` in the form `cm_list` uses. A `cm_results_summary` search
+  without matches lists the quantities the file holds.
 - The server instructions and the guide explain the driver's g-g exponents (`Driver.Acc.GGExp`, rows
   `vel_kmh exp_acc exp_dec`) and that exponents rising with speed often suit a car with aerodynamic
   downforce.
@@ -18,11 +35,6 @@ parameters may still change between minor versions.
   time. `cm_start_sim`, `cm_study_start`, `cm_standalone_launch` and `cm_standalone_attach` take `speed`
   (x real time) for a slower run when the user asks; left out, it is the maximum. `realtime_factor` of
   the standalone tools is gone.
-
-### Added
-- `cm_standalone_launch(movie=true)` and `cm_study_start(mode="standalone", movie=true)` show a standalone
-  run in IPGMovie, connected to that CarMaker program while it runs. A standalone program has no window
-  of its own, so these runs could not be watched before. IPGMovie closes with the program.
 
 ### Fixed
 - A standalone study with `movie=true` started a new program and IPGMovie for every run, so the window

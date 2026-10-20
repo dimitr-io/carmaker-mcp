@@ -193,10 +193,14 @@ def test_launch_run_and_results(mgr):
     assert status["finished"] is False and status["live"] == {"Time": 1.0, "Car.v": 2.0}
     assert mgr.wait_end(timeout_s=0.05) == {"instance": "sa1", "finished": False, "timeout_s": 0.05}
 
+    log = mgr.project / "SimOutput" / "host" / "Log" / "host_1.log"  # the run's lines in the session log
+    log.parent.mkdir(parents=True)
+    log.write_text("SIM_START\tMy Runs/Braking\nERROR\tsomething broke\n\t\tWARNING - Override ignored\n")
     on_loop(mgr, st.sims[0].finished.set)
     end = mgr.wait_end(timeout_s=5)
     assert end["finished"] and end["sim_time_s"] == 12.5 and end["sim_dist_m"] == 100.0
     assert end["error_flag"] == 0 and end["log_errors"] == ["ERROR something broke"]
+    assert end["log_warnings"] == ["WARNING - Override ignored"]
     assert mgr.results()["result_files"] == [str(Path("SimOutput/host/run.erg"))]
     assert mgr.close() == {"instance": "sa1", "closed": True, "process_stopped": True}
     assert st.disconnected == ["stop_and_disconnect"] and mgr.instances == {}

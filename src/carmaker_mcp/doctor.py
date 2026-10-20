@@ -50,9 +50,20 @@ class Report:
     def ok(self) -> bool:
         return all(c.ok is not False for c in self.checks)
 
+    def ready(self) -> dict:
+        """What can work as things are: standalone runs need no MATLAB (found in use: ok was false only
+        because the MATLAB session was missing, and the agent took standalone work for broken too)."""
+        need = ("CarMaker install", "project folder", "state folder")
+        standalone = all(c.ok is not False for c in self.checks if c.name in need)
+        return {"cm4sl": self.ok, "standalone": standalone}
+
     def as_dict(self) -> dict:
         d = asdict(self)
         d["ok"] = self.ok
+        d["ready"] = self.ready()
+        if d["ready"]["standalone"] and not self.ok:
+            d["note"] = ("The cm_standalone_* tools and standalone studies work as things are; the failed "
+                         "checks concern the MATLAB session (CarMaker for Simulink)")
         return d
 
 

@@ -323,3 +323,11 @@ def test_session_start_and_doctor_tools_with_mock(session):
     assert session.session_start()["ready"] is True  # the mock has no MATLAB to start
     d = session.doctor()
     assert "checks" in d and d["uvx_args"][-1] == "carmaker-mcp"
+
+
+def test_standalone_is_ready_without_a_matlab_session(cfg):
+    """Found in use: ok was false only for the missing MATLAB session, and standalone looked broken too."""
+    rep = doctor.diagnose(cfg, installs=INSTALLS, sessions=[], engine="24.2.2")
+    d = rep.as_dict()
+    assert d["ok"] is False and d["ready"] == {"cm4sl": False, "standalone": True}
+    assert "cm_standalone_* tools" in d["note"]
