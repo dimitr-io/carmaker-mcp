@@ -353,6 +353,23 @@ Write a new project file, for example a tyre property file that differs from an 
 | `name` | string | required | Name of the new file relative to the kind's folder (must not exist) |
 | `content` | string | required | The whole text of the file, at most 2 MB |
 
+### `cm_driver_adaption`
+
+*Driver adaption* · destructive
+
+Let IPGDriver learn the car (basic) or the car on this circuit (race), and save the knowledge. It takes minutes (basic about 2 standalone, 5+ with MATLAB; race as long as the test run allows): run it only when the car changed noticeably, the race driver lacks knowledge, or the user asks, and tell the user the duration first. Start returns at once; then 'wait' until state is done/failed.
+
+| Parameter | Type | Default | Meaning |
+|---|---|---|---|
+| `action` | `start` \| `wait` \| `status` \| `cancel` | required | wait: until it ends or timeout_s |
+| `kind` | `basic` \| `race` | `"basic"` | basic: learn the car (needed first); race: laps of a closed circuit |
+| `testrun` | string or null | null | Load this test run first (needed standalone) |
+| `learning_rate` | number | `0.5` | race: 0 sensitive .. 1 aggressive |
+| `knowledge` | string or null | null | Knowledge set to learn into (default: the active one, else DefaultDriverKnowledge) |
+| `save` | boolean | `true` | Save the knowledge (template file or test run; backed up) |
+| `mode` | `auto` \| `cm4sl` \| `standalone` | `"auto"` | auto: the MATLAB session if connected |
+| `timeout_s` | number | `45.0` | Longest time to wait in seconds; keep it below your client's tool time-out and call again if not finished |
+
 ## MATLAB workspace and Simulink
 
 ### `cm_list_workspace_vars`

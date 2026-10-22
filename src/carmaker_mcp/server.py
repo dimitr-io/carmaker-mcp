@@ -463,6 +463,30 @@ def cm_results_plot(
     return content
 
 
+@_tool(DESTRUCTIVE, "Driver adaption")
+async def cm_driver_adaption(
+    action: Annotated[Literal["start", "wait", "status", "cancel"], Field(description="wait: until it ends "
+                                                                                      "or timeout_s")],
+    kind: Annotated[Literal["basic", "race"], Field(description="basic: learn the car (needed first); "
+                                                                "race: laps of a closed circuit")] = "basic",
+    testrun: Annotated[str | None, Field(description="Load this test run first (needed standalone)")] = None,
+    learning_rate: Annotated[float, Field(description="race: 0 sensitive .. 1 aggressive", ge=0, le=1)] = 0.5,
+    knowledge: Annotated[str | None, Field(description="Knowledge set to learn into (default: the active "
+                                                       "one, else DefaultDriverKnowledge)")] = None,
+    save: Annotated[bool, Field(description="Save the knowledge (template file or test run; backed "
+                                            "up)")] = True,
+    mode: Annotated[Literal["auto", "cm4sl", "standalone"], Field(description="auto: the MATLAB session if "
+                                                                              "connected")] = "auto",
+    timeout_s: MaxWait = 45.0,
+) -> dict:
+    """Let IPGDriver learn the car (basic) or the car on this circuit (race), and save the knowledge.
+    It takes minutes (basic about 2 standalone, 5+ with MATLAB; race as long as the test run allows):
+    run it only when the car changed noticeably, the race driver lacks knowledge, or the user asks, and
+    tell the user the duration first. Start returns at once; then 'wait' until state is done/failed."""
+    return await asyncio.to_thread(S().driver_adaption, action, kind, testrun, True, True, learning_rate,
+                                   knowledge, save, mode, timeout_s)
+
+
 @_tool(READ, "Read a section of the guide")
 def cm_guide(
     topic: Annotated[str | None, Field(description="e.g. 'ipgdriver', 'driver', 'parameters'; none lists "

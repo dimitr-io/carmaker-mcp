@@ -9,6 +9,12 @@ parameters may still change between minor versions.
 ## [0.2.3] - unreleased (local build)
 
 ### Added
+- `cm_driver_adaption` runs a driver adaption (Basic: learn the car; Race: laps of a closed circuit) and
+  saves the knowledge into the driver template file or the test run, after a backup (`cm_revert_all`
+  undoes it). It runs in the background (`action` start / wait / status / cancel). In the MATLAB session
+  the session's GUI runs it; without MATLAB the server starts a CarMaker GUI of its own (cars without a
+  Simulink controller). It uses the GUI's undocumented script command `Driver adaptbasicknowledge` /
+  `adaptracedriver` (CarMaker 14.1.1). Checked live standalone: an FS car's Basic adaption took 94 s.
 - The guide has an "IPGDriver reference" from IPG's IPGDriver manual and Formula CarMaker tutorial:
   choosing the standard or race driver, the lap-time optimisation procedure, how the driver plans course
   and speed, corner cutting, following a speed exactly (dtAccBrake and dtMinAccelDecel about 0.01 s),

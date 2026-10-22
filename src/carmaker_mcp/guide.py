@@ -32,11 +32,12 @@ INSTRUCTIONS = (
     "10 1.5 1.5 / 30 2 2 / 60 3 3 / 90 5 5) are often right, a flat table holds it back at speed. "
     "Driver choice: the race driver only on closed circuits (Autocross, Endurance), adapted to both car "
     "and course; the standard driver for Acceleration and Skid Pad, with the limit in focus (axMax, or "
-    "ayMax) set very high so the car, not the driver, is the limit. Driver adaption takes minutes (about 2 standalone, 5+ with MATLAB): run it only when the "
-    "car changed noticeably, the race driver lacks knowledge, or the user asks. To follow a speed exactly "
-    "(input from file, validation) set dtAccBrake and dtMinAccelDecel to about 0.01 s. cm_guide('ipgdriver') "
-    "has the lap-time procedure, corner cutting, adaption and every Driver.* key with its default; "
-    "cm_guide lists the other topics. "
+    "ayMax) set very high so the car, not the driver, is the limit. cm_driver_adaption runs a driver "
+    "adaption and saves the knowledge; it takes minutes (about 2 standalone, 5+ with MATLAB): run it only "
+    "when the car changed noticeably, the race driver lacks knowledge, or the user asks. To follow a speed "
+    "exactly (input from file, validation) set dtAccBrake and dtMinAccelDecel to about 0.01 s. "
+    "cm_guide('ipgdriver') has the lap-time procedure, corner cutting, adaption and every Driver.* key "
+    "with its default; cm_guide lists the other topics. "
     "A run that ends 'completed' does not prove every setting was applied: CarMaker reports ignored or "
     "unsupported parameters only as WARNING lines in the session log (log_warnings of cm_wait_end and of "
     "study rows, cm_log(level='warning')), for example a tyre override not supported at the tyre file's "
@@ -145,7 +146,7 @@ driver is `TestRun`); defaults in brackets.
   the course (Basic adaption, then Race Driver Adaption on that track), and adapted again after any
   change to the car or the test run; with out-of-date knowledge the results differ. Its accelerations
   come from the knowledge (speed dependent table `Driver.Knowl.<i>.Vhcl.Acc`) and a slip controller
-  drives each tyre close to the learnt maximum slip; most standard fields are unused. Needs CarMaker Pro.
+  drives each tyre close to the learnt maximum slip; most standard fields are unused.
   Manual example (5.4, Hockenheim): race driver 93.2 s, standard driver with everyday limits 144.2 s.
 * Standard, user parameterised driver (`Driver.Mode = std`): for Acceleration, Skid Pad and other
   manoeuvres; FCM recommends it for FS cars (reproducible, tunable per discipline). Focus it on the task
@@ -208,6 +209,12 @@ the car. Too small preview times overshoot, too large ones lag (5.6). A speed th
 * The learnt limits are open-loop (longitudinal without lateral and the other way round), so
   `Driver.Acc.Factor.Accel/Decel/Lateral` (1/1/0.95) keep a reserve. A race driver leaving the road after
   an adaption: lower the decel and lateral factors step by step (FCM 5.5.3).
+* Run it with `cm_driver_adaption(action="start", kind="basic" or "race", testrun=...)`, then
+  `action="wait"` until `state` is done or failed. It saves the knowledge into the driver template file, or
+  into the test run when its driver is kept there, after a backup: `cm_revert_all` undoes it. In the
+  MATLAB session the session's GUI runs it; without MATLAB the server starts a CarMaker GUI of its own
+  (cars without a Simulink controller only). Measured: an FS car's Basic adaption took 94 s standalone at
+  maximum speed. Behind it is the GUI's script command `Driver adaptbasicknowledge` / `adaptracedriver`.
 * Needed for the race driver, optional but helpful for the standard driver. Run it again after changes
   with a real effect on the car (tyres, suspension, powertrain), not after small ones.
 * **It takes long:** Basic about 2 minutes standalone and 5 minutes or more in the MATLAB session; the Race

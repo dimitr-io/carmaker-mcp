@@ -1,0 +1,96 @@
+"""A CarMaker GUI started by this server, driven over its command port (``HIL.exe -cmdport``).
+
+Used where no MATLAB session provides a GUI: the GUI runs the script commands (ScriptControl) that
+``cmguicmd`` sends in the MATLAB session. A request is one line of Tcl; the answer is the result, each
+line prefixed with ``O`` (or ``E`` for an error), ended by an empty line.
+"""
+
+from __future__ import annotations
+
+import os
+import signal
+import socket
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+from .backend import BackendError
+
+
+def free_port() -> int:
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def parse(raw: bytes) -> tuple[int, str]:
+    """(status, result): 0 and the text for an ``O`` answer, -1 and the message for ``E``."""
+    text = raw.decode("utf-8", "replace").rstrip("\r\n")
+    lines = text.split("\r\n") if text else []
+    status = -1 if lines and lines[0].startswith("E") else 0
+    return status, "\n".join(ln[1:] if ln[:1] in ("O", "E") else ln for ln in lines)
+
+
+class GuiPort:
+    """``tcl(command, timeout_ms) -> (status, result)``, like the backend's ``gui_tcl``."""
+
+    def __init__(self, port: int, host: str = "127.0.0.1"):
+        self.host, self.port = host, port
+
+    def tcl(self, command: str, timeout_ms: int = 10000) -> tuple[int, str]:
+        if "\n" in command:
+            raise BackendError("the command port takes one line; source a file for longer scripts")
+        try:
+            with socket.create_connection((self.host, self.port), timeout=10) as s:
+                s.sendall((command + "\n").encode())
+                s.settimeout(max(1.0, timeout_ms / 1000))
+                data = b""
+                # An answer ends with an empty line; an empty result is a bare line end (found live).
+                while data != b"\r\n" and not data.endswith(b"\r\n\r\n"):
+                    chunk = s.recv(1 << 20)
+                    if not chunk:
+                        break
+                    data += chunk
+        except TimeoutError:
+            return -3, f"no answer within {timeout_ms / 1000:g} s"
+        except OSError as e:
+            return -2, f"CarMaker GUI not reachable: {e}"
+        return parse(data)
+
+
+class OwnGui:
+    """A CarMaker GUI (HIL.exe) this server started for the project, with its simulation program."""
+
+    def __init__(self, cm_home: Path, project: Path):
+        self.exe = Path(cm_home) / "GUI" / ("HIL.exe" if sys.platform == "win32" else "HIL")
+        if not self.exe.exists():
+            raise BackendError(f"CarMaker GUI not found: {self.exe}")
+        self.project = Path(project)
+        self.port = free_port()
+        self.proc: subprocess.Popen | None = None
+        self.gui = GuiPort(self.port)
+
+    def start(self, timeout_s: float = 90.0) -> None:
+        self.proc = subprocess.Popen([str(self.exe), "-cmdport", str(self.port)], cwd=str(self.project),
+                                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                     stderr=subprocess.DEVNULL)
+        t0 = time.time()
+        while time.time() - t0 < timeout_s:
+            if self.proc.poll() is not None:
+                raise BackendError(f"the CarMaker GUI ended at once (exit code {self.proc.returncode})")
+            if self.gui.tcl("expr 1", 2000)[0] == 0:
+                return
+            time.sleep(1.0)
+        raise BackendError(f"the CarMaker GUI did not answer within {timeout_s:g} s")
+
+    def close(self) -> None:
+        """Stop its simulation program and end the GUI (nothing of the user's is in it)."""
+        if self.proc is None:
+            return
+        self.gui.tcl("Application stop", 60000)
+        try:
+            os.kill(self.proc.pid, signal.SIGTERM)
+        except OSError:
+            pass
+        self.proc = None

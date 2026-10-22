@@ -28,6 +28,7 @@ class MockBackend:
         self.save_mode = "collect"  # GUI storage mode
         self.connected = True  # False: no MATLAB session (standalone work only)
         self.time_acc = 1.0  # GUI simulation speed (999999 is "max")
+        self.adaption_polls, self.adaption_saved = 0, False  # a driver adaption in the GUI
         self.gui_all_saved = True
         self.last_result = ""  # what GetLastResultFName answers
         self.popup_msgs: list[tuple[str, str, int]] = []  # (type, text, answer) the GUI "raised"
@@ -63,6 +64,19 @@ class MockBackend:
             if arg:
                 self.popup_timeout = float(arg[0])
             return 0, f"{old:g}"
+        if command.startswith("source ") or command.startswith("Driver "):
+            if command.startswith("Driver adapt"):
+                self.adaption_polls = 3  # it runs for three state polls
+            return 0, "0" if command.startswith("Driver adapt") else ""
+        if command == "::mcp_adapt_state":
+            self.adaption_polls -= 1
+            return 0, f"active {int(self.adaption_polls > 0)} simstate -5 connected 1 phase 410"
+        if command == "::mcp_adapt_knowledge":
+            return 0, ("template {Test Run} testrun Sub/Run1 k_Name Knowledge k_Mode std "
+                       "k_VehicleLimitsDate {2026-10-22}")
+        if command == "::mcp_adapt_save":
+            self.adaption_saved = True
+            return 0, "template {Test Run} testrun Sub/Run1 knowledge Knowledge"
         if command.startswith("SetSimTimeAcc "):
             self.time_acc = float(command.split()[1])
             return 0, ""

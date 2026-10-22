@@ -81,6 +81,8 @@ class Session:
         self._plot_pid: int | None = None  # IPGControl window of the last plot
         # Thread of a running parameter study; other threads may not change state meanwhile.
         self.study_owner: int | None = None
+        self.busy_with: str | None = None  # what holds the session besides a study (a driver adaption)
+        self._adaption: Any = None  # the driver adaption of this session (adaption.Adaption)
         b: Any = backend
         if getattr(b, "diag_file", "") is None:  # a backend that can log Simulink's diagnostics
             b.diag_file = self.cfg.state_dir / "simulink-diagnostics.txt"
@@ -152,6 +154,8 @@ class Session:
         """``files_only``: the action touches project files only, so a missing MATLAB session is no
         reason to refuse it (no run of that session can be going on); used for standalone work."""
         if self.study_owner not in (None, threading.get_ident()):
+            if self.busy_with:
+                raise BackendError(f"cannot {what} while a {self.busy_with} is running")
             raise BackendError(f"cannot {what} while a parameter study is running "
                                "(cm_study_status, cm_study_wait, cm_study_cancel)")
         self._refuse_foreign_study(what)
@@ -831,6 +835,96 @@ class Session:
         if not p.is_absolute():
             p = self.project.root / p
         return Erg(p)
+
+    # ---- driver adaption ---------------------------------------------------------------
+    def driver_adaption(self, action: str, kind: str = "basic", testrun: str | None = None,
+                        vehicle_limits: bool = True, controller_dynamics: bool = True,
+                        learning_rate: float = 0.5, knowledge: str | None = None, save: bool = True,
+                        mode: str = "auto", timeout_s: float = 45.0, max_run_s: float = 3600.0) -> dict:
+        """Start a driver adaption (in the MATLAB session's GUI, or in a CarMaker GUI of this server's
+        own for cars without Simulink), or report, wait for or cancel the one that runs."""
+        from . import adaption, guiport
+
+        a = self._adaption
+        if action in ("status", "wait", "cancel"):
+            if a is None:
+                raise BackendError("no driver adaption has been started in this session")
+            if action == "cancel":
+                return a.cancel()
+            return a.wait(timeout_s if action == "wait" else 0)
+        if action != "start":
+            raise BackendError("action is start, wait, status or cancel")
+        if a is not None and a.running:
+            raise BackendError("a driver adaption is already running (action 'wait' or 'cancel')")
+        if mode == "auto":
+            try:
+                mode = "cm4sl" if self.backend.status().connected else "standalone"
+            except BackendError:
+                mode = "standalone"
+        if mode not in ("cm4sl", "standalone"):
+            raise BackendError("mode is auto, cm4sl or standalone")
+        project = self.project
+        helpers = self.cfg.state_dir / "adaption.tcl"
+
+        def backup(state: dict) -> None:  # before the GUI writes: cm_revert_all can undo the save
+            files = []
+            if state.get("template") and state["template"] != "Test Run":
+                files.append(project.path("driver", "Template/" + state["template"]))
+            if state.get("testrun"):
+                files.append(project.path("testrun", state["testrun"]))
+            for f in files:
+                if f.exists():
+                    self.store.backup_file(f)
+                    self.store.log("driver_adaption", project.guard.relative(f), adaption=kind,
+                                   knowledge=(state.get("knowledge") or {}).get("Name"))
+
+        if mode == "cm4sl":
+            self.require_idle("start a driver adaption")
+            if testrun:
+                self.load_testrun(testrun)
+            self._set_speed(None)
+            tcl = self.backend.gui_tcl
+            owner = -1  # no thread has this id: every other call is refused until the adaption ends
+
+            def release() -> None:
+                if self.study_owner == owner:
+                    self.study_owner, self.busy_with = None, None
+
+            self.study_owner, self.busy_with = owner, "driver adaption"
+            gui = None
+        else:
+            if not testrun:
+                raise BackendError("standalone: name the test run (its car must not need a Simulink "
+                                   "controller)")
+            from .standalone import find_cm_home
+
+            gui = guiport.OwnGui(find_cm_home(self.cfg.cm_home), project.root)
+            gui.start()
+            tcl = gui.gui.tcl
+            release = gui.close
+            try:
+                for cmd, ms in ((f"LoadTestRun {{{testrun}}}", 60000), ("Application start", 180000),
+                                ("SetSimTimeAcc 999999", 5000)):
+                    status, res = tcl(cmd, ms)
+                    if status != 0:
+                        raise BackendError(f"`{cmd}` failed: {res}")
+            except BaseException:
+                gui.close()
+                raise
+        a = adaption.Adaption(tcl, helpers, kind, vehicle_limits, controller_dynamics, learning_rate,
+                              knowledge, save, max_run_s, before_save=backup, after=release)
+        try:
+            a.prepare()
+        except BaseException:
+            release()
+            raise
+        a.state["mode"] = mode
+        self._adaption = a
+        a.run()
+        out = dict(a.state)
+        out["note"] = ("running: action 'wait' returns when it has finished (a Basic adaption takes minutes, "
+                       "a Race adaption as long as the test run allows)")
+        return out
 
     def standalone_driver(self, testrun: str, overrides: dict, driver: dict | None) -> tuple[dict, list]:
         """Driver values for one standalone program: a copy of the test run's driver template (or the
