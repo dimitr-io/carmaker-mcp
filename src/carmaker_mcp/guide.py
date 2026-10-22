@@ -10,8 +10,8 @@ INSTRUCTIONS = (
     "finished=true (it returns result_file), then cm_results_summary / cm_results_read. "
     "If nothing is running yet call cm_session_start; if a run fails read cm_log and cm_popups. "
     "Typical study: cm_doctor (ready per mode), cm_read of the test run (its driver), cm_study_start "
-    "(variations, gates='markers' for lap times as CarMaker's own timing), cm_study_wait(until_done=true), then cm_results_crossings / cm_results_plot / "
-    "cm_results_export. This server has no MATLAB evaluation: plot with cm_results_plot (IPGControl), or "
+    "(variations, gates='markers' for lap times as CarMaker's own timing), cm_study_wait(until_done=true), "
+    "then cm_results_crossings / cm_results_plot / cm_results_export. This server has no MATLAB evaluation: plot with cm_results_plot (IPGControl), or "
     "use a MATLAB server for MATLAB figures. "
     "Edits (cm_edit, cm_set_workspace_var, cm_model_set) change real project files and the live model: "
     "each is backed up and logged, and cm_revert_all undoes this session's changes. "
@@ -30,7 +30,13 @@ INSTRUCTIONS = (
     "Driver.Acc.GGExp (rows 'vel_kmh exp_acc exp_dec') shapes how much lateral and longitudinal "
     "acceleration the driver combines; for a car with aero downforce, exponents rising with speed (e.g. "
     "10 1.5 1.5 / 30 2 2 / 60 3 3 / 90 5 5) are often right, a flat table holds it back at speed. "
-    "More in the resource carmaker://guide. "
+    "Driver choice: the race driver only on closed circuits (Autocross, Endurance), adapted to both car "
+    "and course; the standard driver for Acceleration and Skid Pad, with the limit in focus (axMax, or "
+    "ayMax) set very high so the car, not the driver, is the limit. Driver adaption takes minutes (about 2 standalone, 5+ with MATLAB): run it only when the "
+    "car changed noticeably, the race driver lacks knowledge, or the user asks. To follow a speed exactly "
+    "(input from file, validation) set dtAccBrake and dtMinAccelDecel to about 0.01 s. cm_guide('ipgdriver') "
+    "has the lap-time procedure, corner cutting, adaption and every Driver.* key with its default; "
+    "cm_guide lists the other topics. "
     "A run that ends 'completed' does not prove every setting was applied: CarMaker reports ignored or "
     "unsupported parameters only as WARNING lines in the session log (log_warnings of cm_wait_end and of "
     "study rows, cm_log(level='warning')), for example a tyre override not supported at the tyre file's "
@@ -121,10 +127,129 @@ Data/Driver/Template, or is `TestRun` for the parametrization saved in the test 
   `10 1.5 1.5` / `30 2 2` / `60 3 3` / `90 5 5`. A flat table holds such a car back at high speed. The
   speed-dependent limits `Driver.Acc.VelDepend` (used with `Driver.Acc.UseVelDepend = 1`) serve the same
   purpose for `ayMax` and `axMax`. If a run leaves the course, lower the exponents a little.
+* Choosing the driver, the lap-time procedure, corner cutting, following a speed exactly, driver
+  adaption and all driver keys: section "IPGDriver reference" (`cm_guide("ipgdriver")`).
 * Replays from input from file: the steering angle reaches `DM.Steer.Ang` about 0.14 s late (a pure delay,
   not changed by the driver's steering limits), the `Velocity` channel without delay. Advance the steering
   in the file by that time when comparing yaw response with measurements. In such a replay
   `dtAccBrake` and `dtMinAccelDecel` did not change the result.
+
+## IPGDriver reference
+Sources: IPG's IPGDriver User Manual 14.1.1 (chapters in brackets), IPG's Formula CarMaker Tutorial (FCM)
+and the CarMaker User's Guide. Keys are infofile keys of the driver template (or of the test run when its
+driver is `TestRun`); defaults in brackets.
+
+### Choosing the driver: standard or race
+* Race driver (`Driver.Mode = race`): only on closed race circuits. It is optimised for the fastest lap on
+  a closed track, so it is the choice for Autocross and Endurance. It must be adapted to both the car and
+  the course (Basic adaption, then Race Driver Adaption on that track), and adapted again after any
+  change to the car or the test run; with out-of-date knowledge the results differ. Its accelerations
+  come from the knowledge (speed dependent table `Driver.Knowl.<i>.Vhcl.Acc`) and a slip controller
+  drives each tyre close to the learnt maximum slip; most standard fields are unused. Needs CarMaker Pro.
+  Manual example (5.4, Hockenheim): race driver 93.2 s, standard driver with everyday limits 144.2 s.
+* Standard, user parameterised driver (`Driver.Mode = std`): for Acceleration, Skid Pad and other
+  manoeuvres; FCM recommends it for FS cars (reproducible, tunable per discipline). Focus it on the task
+  by setting the limit of the dynamics in focus very high, `axMax` for Acceleration and `ayMax` for Skid
+  Pad, even unrealistic values such as 50 m/s^2, so that the car and not the driver sets the limit and
+  the run finds the car's limits. FCM starting point:
+  the aggressive preset, a lower `dtAccBrake`, `dtMinAccelDecel` = 0, accelerations and g-g exponents
+  doubled; if the car leaves the road or rolls over, lower the accelerations step by step.
+* Presets (GUI: right-click in the driver dialog; 3.3), normal / defensive / aggressive: cruising speed
+  150/100/250 km/h, CornerCutCoef 0.5/0.25/0.8, dtAccBrake 0.5/0.75/0.25 s, dtMinAccelDecel 4/8/0.5 s,
+  axMax 3/2/4, axMin -4/-2/-6, ayMax 4/3/5 m/s^2, g-g exponents 1/0.5/1.5.
+
+### Lap-time optimisation procedure (FCM 6.4.4)
+1. The vehicle parameterisation is complete and simulates without errors.
+2. Benchmark run (optional): `cm_results_plot`, lap times with `cm_study_start(gates="markers")`.
+3. Driver Adaption - Basic Knowledge.
+4. Driver Adaption - Race Driver Adaption.
+5. Refine the g-g exponents iteratively.
+6. Adjust the race driver's learning rate if required.
+Repeat after significant changes to the car.
+
+### How the driver plans and drives (2)
+* Before the run it plans once. The course (Static Desired Course) from the route, shaped by the course
+  coefficients below. Then the speed (Static Desired Velocity): the lowest of cruising speed, speed limits
+  and the cornering speed v = sqrt(ayMax / curvature), ramped with axMax and axMin and combined through
+  the g-g exponents, then smoothed: accel/decel sequences shorter than `dtMinAccelDecel` are removed.
+* During the run a longitudinal and a lateral controller follow course and speed, using preview times
+  from the knowledge. Gas and brake are never pressed together; switching waits `dtAccBrake`.
+* `Driver.OutSdcv = 1` writes the planned course and speed to SimOutput: what the driver intended.
+
+### Corner cutting (2.2, 3.1.5)
+`Driver.Course.CornerCutCoef` (0) shapes the planned course: 0 = the route itself (lane centre), 1 = the
+whole lane width (the car's side is led to the inner lane edge and back to the lane centre before the
+curve ends), above 1 = outside the lane. The course optimiser (smallest curvature, swinging out before and
+after curves) needs at least 0.01: between 0 and 0.01 nothing is optimised, and 0.01 follows the course
+more accurately than 0. Cutting widens the curve radius, so the planned cornering speed rises and the
+driven distance shrinks (why the odometer `Car.Distance` reads short of the road position on a skid pad).
+Presets use 0.25 to 0.8 (the manual's race driver 0.8); its steady-circle example uses 0 to hold the radius.
+Use 0 or 0.01 to follow a defined line (steady circle, a measured path), more to let the driver use the
+lane for lap time, and compare variants at the same value. Race Driver Adaption may need a slightly lower
+value to complete its laps (FCM 6.4). Related: `CornerRoundCoef` (0; > 0 rounder, lower peak curvature),
+`ApexShiftCoef` (0; moves the apex; the manual gives both directions for positive values, so check),
+`ShapeCoef` (1), `PylonShiftFdCoef`/`PylonShiftBkCoef` (0.1; pylon lane changes, 0 to 0.3), `LapDriving` (1).
+
+### Following a speed exactly (Input from File, model validation)
+Set `Driver.Long.dtAccBrake` (the forced wait between gas and brake, 0.1 s) and `Driver.Vel.dtMinAccelDecel`
+(removes accel/decel sequences shorter than this from the planned speed, 0 s; presets 4 s and more) very
+low, about 0.01 s, so the driver can follow quick speed changes; keep `Driver.Long.DevMax` 0,
+`Driver.Long.tReact` 0, `Driver.Long.AccuracyCoef` 1, and run a Basic adaption so the preview times fit
+the car. Too small preview times overshoot, too large ones lag (5.6). A speed that reaches the car directly
+(for example `VelExtInput` in a replay) bypasses this planning: there these keys change nothing.
+
+### Driver adaption and knowledge (3.2, 4)
+* What the driver knows about a car (the knowledge, keys `Driver.Knowl.<i>.*`, several cars per template)
+  comes from a driver adaption. Basic: Vehicle Limits (idle, top speed per gear, open-loop steering:
+  `nEngine.MaxSpeed`, the speed dependent acceleration table `Vhcl.Acc`, maximum tyre slip `Long.SlipMax`,
+  pedal free play) and Controller Dynamics (step responses and closed-loop runs: `Long.tPreviewAcc/Bra`,
+  `Long.tPreEngDyn/Dead`, `Long.tPreBraDyn/Dead`, `Lat.tPreview`, `Lat.tYawPro`, `Lat.tPreDyn`). Road
+  friction for the adaption 1.0. Progress: quantity `Driver.Adapt.Phase`. Not for trailers or motorcycles.
+* The learnt limits are open-loop (longitudinal without lateral and the other way round), so
+  `Driver.Acc.Factor.Accel/Decel/Lateral` (1/1/0.95) keep a reserve. A race driver leaving the road after
+  an adaption: lower the decel and lateral factors step by step (FCM 5.5.3).
+* Needed for the race driver, optional but helpful for the standard driver. Run it again after changes
+  with a real effect on the car (tyres, suspension, powertrain), not after small ones.
+* **It takes long:** Basic about 2 minutes standalone and 5 minutes or more in the MATLAB session; the Race
+  Driver Adaption needs a run of at least 1000 s. Run it only when the car changed noticeably, when the
+  race driver has no knowledge for this car and course, or when the user asks, and tell the user the
+  expected duration first.
+* Race Driver Adaption: closed, flat circuit with simple corners, after a Basic adaption. It lowers the lap
+  time lap by lap by raising the acceleration table towards the maximum tyre slip, and saves the knowledge
+  after each lap. Exponents first: start from defaults, look at Car.v, Car.ay, Car.ax at a few speeds,
+  raise the exponents until the lap time converges, lower them when the car leaves the track (spinning
+  while braking: lower `exp_dec`, while accelerating: lower `exp_acc`; manual example 2.0/1.75 to
+  1.5/1.25). Then the learning rate: sensitive for an oversteering car, aggressive for understeer;
+  inconsistent lap times are the sign.
+* A powertrain built in Simulink can leave the adapted driver crawling: then `Driver.Learn.vIdle` in the
+  test run must be above 0 (FCM 5.5.3).
+* Options in the driver's parameter field: `Driver.Adapt.NoLaDy` (only longitudinal), `WeakSide` (1 left,
+  -1 right), `LimitSpeed` (500 km/h), `MinimizeYFlag` (1), `JerkYRed` (0.05).
+
+### Other driver keys (3.1)
+* Speed: `Driver.Vel.CruisingSpeed` (km/h), `Driver.Vel.LatInclFromRoad` (1, use banking),
+  `Driver.Long.Road3DRedCoef` (0, 1 ignores bumps and crests), `Driver.Vel.MinimumSpeed` (1 km/h).
+* Accelerations: `Driver.Acc.axMax/axMin/ayMax` (2/-4/4 m/s^2), `Driver.Acc.GGExp` (rows `vel_kmh exp_acc
+  exp_dec`, n in (ax/axmax)^n + (ay/aymax)^n = 1, linear between rows; default `50 1 1`),
+  `Driver.Acc.UseVelDepend` (0; 1 = the knowledge table), `Driver.Acc.VelDepend.UserDefined` with the
+  table `Driver.Acc.VelDepend` (`vel_kmh acc dec lat`).
+* Pedals: `Driver.Long.dtAccBrakeKind` (0 = the pedal wait may be overruled when unstable),
+  `Driver.Long.TractionControl` (1; the driver eases the throttle at wheel spin using the learnt slip: set
+  0 to test the car's own traction control), `Driver.Long.SmoothCoef` (0), `Driver.Long.ThrottleAmp`,
+  `Driver.Long.BrakeAmp` (1), `Driver.Long.SmoothThrottleLimit` (1), pedal speeds `ThrottleVelPush/Release`,
+  `BrakeVelPush/Release` (10 1/s).
+* Steering: `Driver.Lat.StWhlAngleMax/VelMax/AccMax` (630 deg, 500 deg/s, 3000 deg/s^2),
+  `Driver.Lat.SteeringAmp` (1), `Driver.Lat.DevProReact` and `Driver.Lat.tDwell` (steering style in lane
+  changes).
+* Imperfection: `Driver.Long.DevMax`/`Driver.Lat.DevMax` (0 = follow exactly), `Driver.Long.tReact`/
+  `Driver.Lat.tReact` (0 s), `Driver.Long.AccuracyCoef`/`Driver.Lat.AccuracyCoef` (1), random speed
+  offset `Driver.Vel.Random.Amp/Freq`.
+* Quantities: `Driver.ReCon.Speed` (target speed, writable during a run), `DM.SpeedLimit`,
+  `Driver.Adapt.Phase`; `Driver.ReCon.DriveChar.CF_axy`/`CF_GGExp` with `iChange = 1` re-plan the speed
+  with scaled limits during a run (5.7).
+* Manoeuvre end conditions: CarMaker steps at 1 kHz, so compare with `>=`/`<=` (for example
+  `Vhcl.sRoad >= 75`, `DM.Lap.No >= 1`), never `==` (FCM 3.1.4).
+* Not covered here: traffic, motorcycle, rally driving, gear shifting, consumption-optimised driving.
 
 ## When something goes wrong
 * `cm_log(level="error")`: CarMaker's session log. `cm_popups`: what the GUI asked or reported.
@@ -136,6 +261,25 @@ Data/Driver/Template, or is `TestRun` for the parametrization saved in the test 
 All edits are in place, on real files and on the live model. Backups are taken before the first write of each file.
 Result and log files written by runs are not removed by a revert.
 """
+
+
+# cm_guide topics: name -> the heading its section starts with
+TOPICS = {
+    "run": "## Run a test run", "outputs": "## Choose what a run stores", "movie": "## See the car",
+    "standalone": "## Run without MATLAB", "parameters": "## Change parameters", "driver": "## The driver",
+    "ipgdriver": "## IPGDriver reference", "errors": "## When something goes wrong", "safety": "## Safety",
+}
+
+
+def section(topic: str | None) -> str:
+    """One section of the guide, or the list of topics."""
+    if not topic:
+        return "Topics: " + ", ".join(TOPICS) + ". Ask for one with cm_guide(topic)."
+    if topic not in TOPICS:
+        raise ValueError(f"unknown topic {topic!r}; choose one of {', '.join(TOPICS)}")
+    start = GUIDE.index(TOPICS[topic])
+    end = GUIDE.find("\n## ", start + 1)
+    return GUIDE[start:] if end < 0 else GUIDE[start:end + 1]
 
 
 def prompt_run_and_summarise(testrun: str, quantities: str = "Car.v, Car.ax, Car.ay") -> str:

@@ -36,6 +36,16 @@ Bring up a CarMaker for Simulink session as far as it is missing: start MATLAB (
 
 Check the setup: CarMaker install, Python version, MATLAB release and engine, shared MATLAB session, GUI, project folder. Each failed check comes with its fix.
 
+### `cm_guide`
+
+*Read a section of the guide* · read-only
+
+A section of this server's guide (the same text as the resource carmaker://guide).
+
+| Parameter | Type | Default | Meaning |
+|---|---|---|---|
+| `topic` | string or null | null | e.g. 'ipgdriver', 'driver', 'parameters'; none lists the topics |
+
 ## Run control
 
 ### `cm_status`

@@ -463,6 +463,18 @@ def cm_results_plot(
     return content
 
 
+@_tool(READ, "Read a section of the guide")
+def cm_guide(
+    topic: Annotated[str | None, Field(description="e.g. 'ipgdriver', 'driver', 'parameters'; none lists "
+                                                   "the topics")] = None,
+) -> str:
+    """A section of this server's guide (the same text as the resource carmaker://guide)."""
+    try:
+        return guide.section(topic)
+    except ValueError as e:
+        raise BackendError(str(e)) from e
+
+
 @_tool(READ, "Times at which a quantity reaches values")
 def cm_results_crossings(
     erg: ErgPath,

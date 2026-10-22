@@ -7,7 +7,7 @@ from carmaker_mcp import server
 
 OPTIONAL = {"cm_gui_tcl", "cm_model_add_block", "cm_model_add_line", "cm_model_delete_block"}
 DEFAULT = {
-    "cm_session_start", "cm_doctor",
+    "cm_session_start", "cm_doctor", "cm_guide",
     "cm_status", "cm_load_testrun", "cm_start_sim", "cm_stop_sim", "cm_wait_end", "cm_log", "cm_live",
     "cm_dva_write", "cm_dva_release", "cm_popups", "cm_popup_timeout",
     "cm_results_list", "cm_results_summary", "cm_results_read", "cm_results_crossings", "cm_results_export", "cm_results_plot",
@@ -57,7 +57,7 @@ def test_default_and_optional_tools(monkeypatch):
     assert server.features_from_env() == frozenset()
 
     slim = set(tools(server.create_server(disabled={"standalone", "study", "matlab", "movie"})))
-    assert slim == {t for t in DEFAULT if server._group(t) is None} and len(slim) == 29
+    assert slim == {t for t in DEFAULT if server._group(t) is None} and len(slim) == 30
     monkeypatch.setenv("CM_DISABLE", "standalone,what")
     assert server.disabled_from_env() == {"standalone"}
 

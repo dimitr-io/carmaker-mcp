@@ -19,7 +19,7 @@ from carmaker_mcp import server
 OUT = Path(__file__).resolve().parent.parent / "docs" / "tools.md"
 
 SECTIONS = [
-    ("Setup", ("cm_session_start", "cm_doctor")),
+    ("Setup", ("cm_session_start", "cm_doctor", "cm_guide")),
     ("Run control", ("cm_status", "cm_load_testrun", "cm_start_sim", "cm_stop_sim", "cm_wait_end", "cm_log",
                      "cm_live", "cm_dva_write", "cm_dva_release", "cm_popups", "cm_popup_timeout",
                      "cm_gui_tcl")),

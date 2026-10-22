@@ -9,6 +9,14 @@ parameters may still change between minor versions.
 ## [0.2.3] - unreleased (local build)
 
 ### Added
+- The guide has an "IPGDriver reference" from IPG's IPGDriver manual and Formula CarMaker tutorial:
+  choosing the standard or race driver, the lap-time optimisation procedure, how the driver plans course
+  and speed, corner cutting, following a speed exactly (dtAccBrake and dtMinAccelDecel about 0.01 s),
+  driver adaption and its cost, and the driver keys with their defaults. The server instructions give
+  the essentials and point to it.
+- `cm_guide(topic)` returns a section of the guide: clients such as Claude Desktop do not let an agent
+  open MCP resources by itself.
+- `cm_read`'s `driver` summary includes `Driver.Mode` and `Driver.Course.CornerCutCoef`.
 - `cm_study_start(gates="markers")` times every run at the test run's trigger point markers, as CarMaker's
   own lap timing does (the instrument's sector times): rows get `sectors`, taken from
   `DM.TriggerPoint.Time` when the result file holds it (standalone studies store it) and otherwise from
