@@ -6,7 +6,7 @@ parameters may still change between minor versions.
 
 ## [Unreleased]
 
-## [0.2.3] - unreleased (local build)
+## [0.3.0] - 2026-10-22
 
 ### Added
 - `cm_driver_adaption` runs a driver adaption (Basic: learn the car; Race: laps of a closed circuit) and
