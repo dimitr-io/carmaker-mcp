@@ -3,8 +3,26 @@
 <!-- mcp-name: io.github.dimitr-io/carmaker-mcp -->
 
 An [MCP](https://modelcontextprotocol.io) server that lets an AI agent drive **IPG CarMaker** on your
-computer: start a session, run test runs, read the results, change vehicle data and Simulink controller
-parameters, and undo what it changed.
+computer: start a session, run test runs and parameter studies, read and plot the results, change vehicle,
+driver and Simulink controller parameters, and undo what it changed.
+
+<!-- Video: upload the mp4 in GitHub's web editor and put the link it gives on the next line. -->
+https://github.com/user-attachments/assets/VIDEO-ID
+
+*Claude Desktop with this server (CarMaker without MATLAB, IPGMovie open) and MathWorks'
+[MATLAB MCP server](https://github.com/matlab/matlab-mcp-core-server) for the figure. A 68-run sweep of
+the driver's limits on a Formula Student skid pad; the agent's work is shown 30 times faster.*
+
+<details>
+<summary>The prompt in the video</summary>
+
+> Open Carmaker (standalone) and run Skidpad tests with the Rhea vehicle (torque vectoring disabled). Run a
+> parameter sweep for the IPGDriver's lateral acceleration limits and gg exponents to get the best lap time.
+> Open IPGMovie first so I can see the runs. Evaluate lap time based on the average time between the second
+> lap on the right and the second lap on the left. Plot out the yaw rate and lateral acceleration of the
+> best run using MATLAB (MCP).
+
+</details>
 
 > Unofficial community project, not affiliated with or endorsed by IPG Automotive or MathWorks. You need your
 > own CarMaker and MATLAB/Simulink licences. This repository contains no IPG or MathWorks code or data.
@@ -26,15 +44,24 @@ Things you can ask an agent once the server is connected:
 * "Run the braking test run and tell me the stopping distance."
 * "Set `Kp_yaw` to 1.5 in the controller model, run the slalom again and compare the yaw rate."
 * "Try the lane change with a vehicle mass of 280, 300 and 320 kg and tabulate the lateral acceleration."
+* "Sweep the driver's lateral acceleration limit and g-g exponents on the skid pad and give me the best lap
+  time." (lap times come from the test run's own timing markers, as CarMaker's instrument shows them)
+* "Plot the yaw rate of the last two runs over distance."
+* "The car got heavier. Run a driver adaption, then the autocross again."
 * "The last run aborted. Why?"
 * "Undo everything you changed."
+
+Runs go at CarMaker's maximum speed unless you ask for a slower one. Parameter studies run in the
+background, one run after another, with IPGMovie open if you want to watch. The server also teaches the agent
+how IPGDriver works (`cm_guide`): which driver to choose, how its limits and g-g exponents set the lap time,
+and when a driver adaption is worth its minutes.
 
 It works in two ways, and the agent picks the one that fits the vehicle:
 
 | | MATLAB-connected session | Standalone run |
 |---|---|---|
 | Use it for | vehicles whose controller is a Simulink model (CarMaker for Simulink) | vehicles with CarMaker's built-in controllers |
-| Needs | MATLAB with your model, and the CarMaker GUI (the server can start both) | only CarMaker; no MATLAB, no window |
+| Needs | MATLAB with your model, and the CarMaker GUI (the server can start both) | only CarMaker; no MATLAB, no window (IPGMovie on request) |
 
 More worked examples:
 [docs/examples.md](https://github.com/dimitr-io/carmaker-mcp/blob/main/docs/examples.md).
@@ -53,8 +80,8 @@ outside what this server does or has been tried with.
   batch mode with start-up files. The server runs its own parameter studies instead, one run after another.
 * **Building scenarios:** the Scenario Editor and roads, traffic, sensors, the environment, OpenSCENARIO import.
   `cm_edit` changes keys in files that exist; it does not author these things.
-* **Most visualisation:** Movie NX, IPGControl, Instruments, video export, Model Check. Of IPGMovie, only single
-  pictures.
+* **Most visualisation:** Movie NX, Instruments, video export, Model Check. Of IPGMovie: watching runs and single
+  pictures; of IPGControl: plots of result files.
 * **Other result formats:** only `.erg` files are read, not MDF or ASCII.
 * **Rebuilding the simulation program:** models in C code or generated with Simulink Coder.
 * **Remote machines:** CarMaker and MATLAB must run on the computer the server runs on.
@@ -65,8 +92,9 @@ outside what this server does or has been tried with.
 * Encrypted or protected data files.
 * CarMaker and MATLAB versions other than the ones named above; more than one MATLAB session or CarMaker GUI
   at a time.
-* Several standalone runs in parallel, pausing and resuming a standalone run, parameter studies on standalone
-  runs.
+* Several standalone runs in parallel (each needs a CarMaker licence), pausing and resuming a standalone run.
+* Race driver adaption, and driver adaption in the MATLAB session: `cm_driver_adaption` uses an undocumented
+  command of the CarMaker GUI, and only the Basic adaption of a standalone run has been tried.
 * Test runs with traffic, sensors or driver-assistance functions. Nothing stands in their way, but every check
   so far used vehicle-dynamics runs without them.
 
@@ -363,7 +391,8 @@ for confirmation where it matters. Every parameter is described in
 | Tool | What it does |
 |---|---|
 | `cm_session_start` | Start MATLAB, the model and the CarMaker GUI as far as they are missing |
-| `cm_doctor` | Check the setup and say how to fix what is wrong |
+| `cm_doctor` | Check the setup, say which mode is ready and how to fix what is wrong |
+| `cm_guide` | A section of the server's guide, e.g. the IPGDriver reference |
 | `cm_status` | Simulation state, active model, project folder |
 | `cm_load_testrun` | Load a test run into the CarMaker GUI |
 | `cm_start_sim`, `cm_stop_sim` | Start and stop the simulation; a run writes a result file by default |
@@ -380,6 +409,9 @@ for confirmation where it matters. Every parameter is described in
 | `cm_results_list` | Newest result files |
 | `cm_results_summary` | First, last, min, max and mean of quantities in a result file; search for quantity names |
 | `cm_results_read` | Time series from a result file |
+| `cm_results_crossings` | Times at which a quantity reaches values: lap and sector times from gates |
+| `cm_results_plot` | Plot quantities of one or more result files in IPGControl (no MATLAB needed); a picture comes back to the agent |
+| `cm_results_export` | Write quantities of a result file at full resolution to a MAT or CSV file |
 | `cm_output_quantities`, `cm_output_quantities_edit` | See which quantities runs write to result files, and add or remove some |
 | `cm_movie_open`, `cm_movie_snapshot` | Open IPGMovie and get a picture of the 3D view: any moment of the last run, or of a result file |
 
@@ -387,12 +419,14 @@ for confirmation where it matters. Every parameter is described in
 
 | Tool | What it does |
 |---|---|
-| `cm_list`, `cm_read` | List and read test runs, vehicles, drivers, tyres and other project files |
+| `cm_list`, `cm_read` | List and read test runs, vehicles, drivers, tyres and other project files; for a test run, the driver it really uses |
+| `cm_diff` | Compare two project files: keys only in one, and values that differ |
 | `cm_edit`, `cm_clone`, `cm_create` | Change keys in a project file (only the edited lines change), copy a file, or write a new one |
 | `cm_list_workspace_vars`, `cm_get_workspace_var`, `cm_set_workspace_var` | MATLAB base workspace and Simulink model workspace, where controller parameters usually are |
 | `cm_model_get`, `cm_model_set`, `cm_model_save` | Simulink block and model parameters; save the model |
 | `cm_model_logs_save` | After a run, save what Simulink logged (logged signals, To Workspace blocks) and both workspaces to a MAT file. `save_logs` on `cm_start_sim` and `cm_study_start` does it automatically for every run |
-| `cm_study_start`, `cm_study_wait`, `cm_study_status`, `cm_study_cancel` | Run one test run with several parameter sets and tabulate the results, without changing any file |
+| `cm_study_start`, `cm_study_wait`, `cm_study_status`, `cm_study_cancel` | Run one test run with several parameter sets (a list, or every combination of value lists), with lap and sector times and a ranking, without changing any file |
+| `cm_driver_adaption` | Let IPGDriver learn the car (Basic) or the circuit (Race) and save its knowledge, backed up; takes minutes |
 
 **Standalone runs (no MATLAB)**
 
@@ -447,8 +481,8 @@ Run `uvx carmaker-mcp doctor` first: it names most setup problems together with 
 | `uvx` fails while installing `matlabengine` | The pin must match your MATLAB release, and that MATLAB must be installed. Use the arguments `doctor` prints |
 | "CarMaker ships no cmapi for Python 3.x" | Add `--python 3.12` (or another version the message lists) |
 | A tool call hangs at load or start | The CarMaker GUI is showing a question. Answer it, or see `CM_POPUP_TIMEOUT` |
-| "too many licenses in use" on a standalone run | An open MATLAB with CarMaker for Simulink holds the licence. Close that model or MATLAB |
-| The wait tool returns `finished: false` | Not an error: waits are limited to 45 s per call and are simply repeated |
+| "too many licenses in use" on a standalone run | Another CarMaker program holds the licence: an open MATLAB with CarMaker for Simulink, or a standalone program the server left open (`cm_standalone_servers`, `cm_standalone_close`). A study stops at the first such run; `close_open=true` closes the server's own programs first |
+| The wait tool returns `finished: false` | Not an error: waits are limited to 50 s per call (some clients end a call after 60 s) and are simply repeated |
 
 More: [docs/troubleshooting.md](https://github.com/dimitr-io/carmaker-mcp/blob/main/docs/troubleshooting.md).
 The server's own log is `server.log` in the state folder.
