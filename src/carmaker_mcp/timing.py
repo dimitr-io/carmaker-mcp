@@ -48,12 +48,23 @@ def sector_times(erg: Erg, markers: list[dict]) -> dict:
     """Time from the last reference marker (mode 1 or 3) to each measuring marker (mode 2 or 3).
     CarMaker's own values when the file stores DM.TriggerPoint.* (they are what its lap timing shows);
     otherwise from the road position (checked on a skid pad: within 2 to 6 ms of CarMaker's values)."""
-    measuring = [m for m in markers if m["mode"] in (2, 3)]
     own = carmaker_times(erg)
     if own is not None:
-        at = {c["id"]: c["time"] for c in own}
-        return {"on": "DM.TriggerPoint.Time",
-                "sectors": [{"id": m["id"], "s": m["s"], "time": at.get(m["id"])} for m in measuring]}
+        # Accept CarMaker's value only if the reference marker was passed too and the value matches the
+        # time between the two passes. Found in use: in runs that left the road the first marker passed
+        # reported id 1 instead of 0, no reference was set, and every "time" read 0.001 s.
+        time_at = {c["id"]: c["time"] for c in own}
+        passed_at = {c["id"]: c["at_s"] for c in own}
+        sectors, ref = [], None
+        for m in markers:
+            if m["mode"] in (2, 3):
+                t = time_at.get(m["id"])
+                ok = (t is not None and ref is not None and ref in passed_at and m["id"] in passed_at
+                      and abs((passed_at[m["id"]] - passed_at[ref]) - t) < 0.1)
+                sectors.append({"id": m["id"], "s": m["s"], "time": t if ok else None})
+            if m["mode"] in (1, 3):
+                ref = m["id"]
+        return {"on": "DM.TriggerPoint.Time", "sectors": sectors}
     pos = _position(erg)
     found = erg.crossings(pos, [m["s"] for m in markers], "rising")["crossings"]
     passed = {c["value"]: c["first"] for c in found}

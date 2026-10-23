@@ -20,7 +20,7 @@ from typing import Annotated, Any, Literal
 from fastmcp import Context, FastMCP
 from fastmcp.exceptions import ToolError
 from mcp.types import ImageContent, TextContent, ToolAnnotations
-from pydantic import Field
+from pydantic import AfterValidator, Field
 
 from . import __version__, guide
 from .backend import BackendError
@@ -213,11 +213,20 @@ Instance = Annotated[str | None, Field(description="Standalone instance id such 
                                                    "omitted while there is only one)")]
 ErgPath = Annotated[str, Field(description="Result file (.erg): absolute path, or relative to the project")]
 Quantities = Annotated[list[str], Field(description="CarMaker quantity names, e.g. ['Time', 'Car.v']")]
-MaxWait = Annotated[float, Field(description="Longest time to wait in seconds; keep it below your "
-                                             "client's tool time-out and call again if not finished",
-                                 gt=0)]
+MAX_WAIT_S = 50.0  # some clients end a tool call after 60 s (found in use: a remote device bridge)
+MaxWait = Annotated[float, Field(description="Longest time to wait in s, at most 50 (larger values are cut "
+                                             "to 50); call again if not finished", gt=0),
+                    AfterValidator(lambda v: min(v, MAX_WAIT_S))]
 Speed = Annotated[float | None, Field(description="x real time; omit for CarMaker's maximum. Slower only "
                                                    "if the user asks", gt=0)]
+Detail = Annotated[Literal["brief", "compact", "full"],
+                   Field(description="brief: per run label, valid, end status, sector or split times, "
+                                     "abort reason. compact: also time, distance, result file and min / "
+                                     "max / mean / last of the quantities. full: also every run's keys, "
+                                     "workspace values and all statistics")]
+RankBy = Annotated[str | None, Field(description="Rank the valid runs: 'sectors' (mean sector time), "
+                                                 "'splits' (their sum), 'sim_time', or a quantity statistic "
+                                                 "such as 'Car.v.max'; '-' first for largest first")]
 Overrides = Annotated[dict[str, Any] | None, Field(description="Test-run keys to change in memory only, "
                                                                "e.g. {'Vehicle.DriverTemplate.FName': 'X'}")]
 
@@ -246,7 +255,8 @@ async def cm_session_start(
 @_tool(READ, "Check the setup")
 def cm_doctor() -> dict:
     """Check the setup: CarMaker install, Python version, MATLAB release and engine, shared MATLAB
-    session, GUI, project folder. Each failed check comes with its fix."""
+    session, GUI, project folder. Each failed check comes with its fix. ok: at least one mode is ready
+    (see ready); all_checks_passed: everything, the MATLAB session included."""
     return S().doctor()
 
 
@@ -603,8 +613,20 @@ def cm_read(
                                                     "'DrivMan.'")] = None,
 ) -> dict:
     """Key / value pairs of a CarMaker infofile. Large files are truncated: filter by keys or prefix.
-    For a test run also `driver`: its driver template (or 'TestRun'), knowledge and main limits."""
+    For a test run `driver` comes first: its driver template (or 'TestRun'), knowledge and main limits."""
     return S().project.read(kind, name, keys, prefix)
+
+
+@_tool(READ, "Compare two project data files")
+def cm_diff(
+    kind: Kind,
+    a: Annotated[str, Field(description="First file, relative to the kind's folder")],
+    b: Annotated[str, Field(description="Second file")],
+    prefix: Annotated[str | None, Field(description="Only keys starting with this")] = None,
+) -> dict:
+    """Keys only in a, only in b, and those whose values differ ([a, b]), e.g. two vehicles or a test
+    run and its clone."""
+    return S().project.diff(kind, a, b, prefix)
 
 
 @_tool(DESTRUCTIVE, "Edit a project data file")
@@ -870,15 +892,18 @@ def cm_standalone_close(instance: Instance = None) -> dict:
 @_tool(WRITE, "Start a parameter study")
 def cm_study_start(
     testrun: Annotated[str, Field(description="Test run relative to Data/TestRun")],
-    variations: Annotated[list[dict[str, Any]], Field(
+    variations: Annotated[list[dict[str, Any]] | None, Field(
         description="One entry per run: {'label': 'heavy', 'keys': {'Body.mass': 320}, 'workspace': "
                     "{'Kp_yaw': 1.5}, 'driver': {'Driver.Acc.ayMax': 14, 'Driver.Acc.GGExp': "
                     "'10 1.5 1.5\\n90 5 5'}}. 'keys': infofile keys in memory "
                     "for that run; 'workspace': MATLAB variables in 'scope', restored after the run; "
                     "'driver': driver template values, in a copy deleted after the run. All optional",
-        min_length=1, max_length=50)],
+        max_length=100)] = None,
     quantities: Annotated[list[str] | None, Field(description="Quantities to summarise per run (default: "
-                                                              "Time, Car.v)")] = None,
+                                                              "Time, Car.v). Standalone they are also all "
+                                                              "its result file stores, besides what timing "
+                                                              "needs: list every quantity to plot "
+                                                              "later")] = None,
     mode: Annotated[Literal["auto", "cm4sl", "standalone"],
                     Field(description="cm4sl: the MATLAB-connected session. standalone: CarMaker without "
                                       "MATLAB (no 'workspace' values). auto: cm4sl if MATLAB is "
@@ -898,28 +923,32 @@ def cm_study_start(
                                        "in m: 'splits', the times between them")] = None,
     keep_open: Annotated[bool, Field(description="With movie: leave the last run in IPGMovie (close "
                                                  "it with cm_standalone_close)")] = False,
+    grid: Annotated[dict[str, dict[str, list]] | None, Field(
+        description="Every combination of value lists, added to variations: {'driver': "
+                    "{'Driver.Acc.ayMax': [12, 14], 'Driver.Acc.GGExp': ['10 1 1', '10 1.5 1.5\n90 5 5']}, "
+                    "'keys': {...}, 'workspace': {...}}; at most 100 runs")] = None,
+    close_open: Annotated[bool, Field(description="standalone: first close the CarMaker programs this "
+                                                  "server left open (each holds a licence)")] = False,
 ) -> dict:
     """Run one test run several times with different parameter values, one after another, in the
     background. Returns a study id at once; wait with cm_study_wait. Nothing is written to project files.
     The answer names values that will change nothing: keys_not_found, workspace_not_found and
     workspace_overruled (use scope=<model>); Driver.* keys that a driver template overrides are refused
-    (use 'driver'). Rows give valid and wall_s, the clock time of the run."""
+    (use 'driver'). Rows give valid and wall_s, the clock time of the run. A study stops at the first
+    run that finds no CarMaker licence."""
     return ST().start(testrun, variations, quantities, mode, scope, max_run_s, save_logs, movie, speed,
-                      gates, keep_open)
+                      gates, keep_open, grid, close_open)
 
 
 @_tool(READ, "Parameter study progress and results")
 def cm_study_status(
     study: Annotated[str | None, Field(description="Study id (default: the latest)")] = None,
-    detail: Annotated[Literal["compact", "full"],
-                      Field(description="compact: per run its label, end status, time, distance, result "
-                                        "file and min / max / mean / last of the quantities. full: also "
-                                        "every run's keys and workspace values and all "
-                                        "statistics")] = "compact",
+    detail: Detail = "compact",
+    rank_by: RankBy = None,
 ) -> dict:
     """State of a study (running, done, cancelled, failed) and one row per finished run, which also maps
     every label to its result file. To wait for progress use cm_study_wait."""
-    return ST().status(study, detail)
+    return ST().status(study, detail, rank_by)
 
 
 @_tool(READ, "Wait for a parameter study")
@@ -928,11 +957,12 @@ async def cm_study_wait(
     timeout_s: MaxWait = 45.0,
     until_done: Annotated[bool, Field(description="Return only when the study has ended (or at "
                                                   "timeout_s)")] = False,
+    detail: Detail = "brief",
 ) -> dict:
     """Wait until another run of the study has finished or the study has ended, at most timeout_s, and
-    return the rows no earlier call returned (cm_study_status has the whole table). Call it again while
-    state is 'running'. Use this for studies instead of cm_wait_end."""
-    return await asyncio.to_thread(ST().wait_progress, study, timeout_s, until_done)
+    return the rows no earlier call returned (cm_study_status has the whole table and rank_by). Call it
+    again while state is 'running'. Use this for studies instead of cm_wait_end."""
+    return await asyncio.to_thread(ST().wait_progress, study, timeout_s, until_done, detail)
 
 
 @_tool(DESTRUCTIVE, "Cancel a parameter study")

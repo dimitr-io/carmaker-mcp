@@ -58,7 +58,9 @@ class Report:
         return {"cm4sl": self.ok, "standalone": standalone}
 
     def as_dict(self) -> dict:
-        d = {"ready": self.ready(), "ok": self.ok, **asdict(self)}
+        ready = self.ready()
+        # ok: something can run (found in use: ok=false while standalone was ready read as "broken")
+        d = {"ready": ready, "ok": any(ready.values()), "all_checks_passed": self.ok, **asdict(self)}
         if d["ready"]["standalone"] and not self.ok:
             d["note"] = ("The cm_standalone_* tools and standalone studies work as things are; the failed "
                          "checks concern the MATLAB session (CarMaker for Simulink)")

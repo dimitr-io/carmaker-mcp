@@ -9,6 +9,14 @@ parameters may still change between minor versions.
 ## [0.3.0] - 2026-10-22
 
 ### Added
+- `cm_study_start(grid={...})` runs every combination of value lists for `keys`, `driver` and `workspace`
+  (a g-g table counts as one value), alone or after `variations`; at most 100 runs per study.
+- `cm_study_status(rank_by=...)` ranks the valid runs by their mean sector time, the sum of their splits,
+  the simulation time or a quantity statistic such as `Car.v.max` (`-` for largest first).
+- `cm_diff(kind, a, b)` compares two project files: keys only in a, only in b, and differing values.
+- A standalone study stops at the first run that finds no CarMaker licence, instead of failing run after
+  run. `cm_study_start` names the CarMaker programs this server left open (each holds a licence), and
+  `close_open=true` closes them first.
 - `cm_driver_adaption` runs a driver adaption (Basic: learn the car; Race: laps of a closed circuit) and
   saves the knowledge into the driver template file or the test run, after a backup (`cm_revert_all`
   undoes it). It runs in the background (`action` start / wait / status / cancel). In the MATLAB session
@@ -63,6 +71,17 @@ parameters may still change between minor versions.
   of its own, so these runs could not be watched before. IPGMovie closes with the program.
 
 ### Changed
+- `cm_study_wait` answers one brief line per run (label, valid, end status, sector or split times, abort
+  reason); `detail` gives more. `cm_study_status` takes `detail="brief"` too.
+- Waits (`timeout_s`, `max_wait_s`) are cut to 50 s: a client that ends tool calls after 60 s cut a
+  long study wait off.
+- `cm_doctor`: `ok` is true when at least one mode is ready; `all_checks_passed` says whether every check,
+  the MATLAB session included, passed.
+- `cm_read` of a test run gives its `driver` summary first.
+- An invalid study row's `abort_reason` is CarMaker's own reason (the car left the road, for example)
+  rather than the first log line.
+- The `quantities` of a study are, standalone, everything its result files store besides what timing
+  needs; the guide says what marker sector times are and why `cm_results_crossings` differs by a few ms.
 - `cm_study_wait` returns each row once: a cursor per study, so rows that finished between two calls, or
   during parallel calls, are not lost. `cm_study_status` has the whole table.
 - `cm_study_start` refuses `Driver.*` given as plain keys while the test run names a driver template
@@ -86,6 +105,8 @@ parameters may still change between minor versions.
   the standalone tools is gone.
 
 ### Fixed
+- Sector times of a run that left the road read 0.001 s: CarMaker's trigger values are now used only when
+  the reference marker was passed and the value matches the time between the passes; otherwise `null`.
 - A standalone study with `movie=true` started a new program and IPGMovie for every run, so the window
   closed before anything could be seen. The study now keeps one program and one IPGMovie window for all
   its runs (a program that ended is replaced) and closes them after the last run. Without a program

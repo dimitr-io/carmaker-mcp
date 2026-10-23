@@ -112,16 +112,35 @@ class Project:
             d = {k: v for k, v in d.items() if k.startswith(prefix)}
         total = len(d)
         items = dict(list(d.items())[:max_items])
-        out = {
-            "kind": kind, "name": name, "infofile": True, "total_keys": total,
-            "returned": len(items), "values": items,
-        }
+        out: dict = {"kind": kind, "name": name, "infofile": True}
+        if kind == "testrun":  # first: the values below may be overruled by its driver template
+            out["driver"] = self.driver(info.to_dict())
+        out.update({"total_keys": total, "returned": len(items), "values": items})
         if total > len(items):
             out["note"] = f"showing {len(items)} of {total} keys: filter with keys or prefix"
         elif total == 0 and (keys or prefix):
             out["note"] = f"no key matches the filter; the file has {len(info.to_dict())} keys"
-        if kind == "testrun":
-            out["driver"] = self.driver(info.to_dict())
+        return out
+
+    def diff(self, kind: str, a: str, b: str, prefix: str | None = None, max_items: int = 300) -> dict:
+        """Keys only in a, only in b, and keys whose values differ (whitespace-insensitive)."""
+        da, db = (self._load(kind, n)[1].to_dict() for n in (a, b))
+        if prefix:
+            da = {k: v for k, v in da.items() if k.startswith(prefix)}
+            db = {k: v for k, v in db.items() if k.startswith(prefix)}
+
+        def same(x: str, y: str) -> bool:
+            return x.split() == y.split()
+
+        differ = {k: [da[k], db[k]] for k in da if k in db and not same(da[k], db[k])}
+        out: dict = {"kind": kind, "a": a, "b": b,
+                     "only_in_a": {k: da[k] for k in da if k not in db},
+                     "only_in_b": {k: db[k] for k in db if k not in da},
+                     "differ": differ, "same": sum(1 for k in da if k in db) - len(differ)}
+        for key in ("only_in_a", "only_in_b", "differ"):
+            if len(out[key]) > max_items:
+                out[key] = dict(list(out[key].items())[:max_items])
+                out["note"] = f"lists cut to {max_items} keys each: filter with prefix"
         return out
 
     def driver(self, testrun: dict[str, str]) -> dict:

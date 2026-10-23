@@ -56,10 +56,25 @@ def test_a_run_that_stops_early_has_no_time_for_the_later_sectors(tmp_path):
     assert r["sectors"][0]["time"] == pytest.approx(5.7334, abs=1e-3) and r["sectors"][1]["time"] is None
 
 
-def test_carmakers_own_values_are_reported_when_stored(tmp_path):
-    t = np.arange(0, 3, 0.5)
-    e = Erg(write_erg(tmp_path, {"Time": t, "Vhcl.sRoad": t, "DM.TriggerPoint.Id": [0, 0, 1, 1, 3, 3],
-                                 "DM.TriggerPoint.Time": [0, 0, 5.25, 5.25, 5.2, 5.2]}))
-    assert timing.carmaker_times(e) == [{"id": 1, "at_s": 1.0, "time": 5.25}, {"id": 3, "at_s": 2.0, "time": 5.2}]
-    r = timing.sector_times(e, timing.trigger_markers(SKIDPAD))  # CarMaker's values come first
-    assert r["on"] == "DM.TriggerPoint.Time" and [x["time"] for x in r["sectors"]] == [5.25, 5.2]
+def _triggers(t, passes):
+    """DM.TriggerPoint.Id / .Time as CarMaker writes them: each pass sets the id and its measured time."""
+    ids, tp = np.full(len(t), -1.0), np.zeros(len(t))
+    for at, mid, val in passes:
+        ids[t >= at], tp[t >= at] = mid, val
+    return ids, tp
+
+
+def test_carmakers_own_values_are_used_when_they_are_consistent(tmp_path):
+    t = np.arange(0, 30, 0.01)
+    ids, tp = _triggers(t, [(11.0, 0, 0.0), (16.5, 1, 5.5), (22.0, 2, 0.0), (27.25, 3, 5.25)])
+    e = Erg(write_erg(tmp_path, {"Time": t, "Vhcl.sRoad": t, "DM.TriggerPoint.Id": ids, "DM.TriggerPoint.Time": tp}))
+    r = timing.sector_times(e, timing.trigger_markers(SKIDPAD))
+    assert r["on"] == "DM.TriggerPoint.Time" and [x["time"] for x in r["sectors"]] == [5.5, 5.25]
+
+
+def test_a_run_that_left_the_road_gets_no_sector_times(tmp_path):
+    """Found in use: the first marker reported id 1, no reference was set, and the times read 0.001 s."""
+    t = np.arange(0, 18.5, 0.01)
+    ids, tp = _triggers(t, [(11.34, 1, 0.001), (16.33, 2, 0.001)])
+    e = Erg(write_erg(tmp_path, {"Time": t, "Vhcl.sRoad": t, "DM.TriggerPoint.Id": ids, "DM.TriggerPoint.Time": tp}))
+    assert [x["time"] for x in timing.sector_times(e, timing.trigger_markers(SKIDPAD))["sectors"]] == [None, None]

@@ -55,6 +55,86 @@ _ROW = ("label", "valid", "abort_reason", "vehicle", "driver_template", "driver"
 _STATS = ("min", "max", "mean", "last")
 
 
+MAX_RUNS = 100
+
+
+def grid_variations(grid: dict[str, dict[str, list]]) -> list[dict]:
+    """Every combination of the listed values: {'keys': {k: [...]}, 'driver': {...}, 'workspace': {...}}.
+    Labels name the values; a long value (a table) is named by its position, #1, #2..."""
+    import itertools
+
+    if set(grid) - {"keys", "driver", "workspace"}:
+        raise BackendError("grid takes 'keys', 'driver' and 'workspace'")
+    axes = []  # (group, name, values), in the order given: the labels follow it
+    for group, entries in grid.items():
+        for name, values in (entries or {}).items():
+            if not isinstance(values, list) or not values:
+                raise BackendError(f"grid {group} {name!r}: give a non-empty list of values")
+            axes.append((group, name, values))
+    if not axes:
+        return []
+    out = []
+    for combo in itertools.product(*[range(len(v)) for _, _, v in axes]):
+        var: dict[str, Any] = {"keys": {}, "driver": {}, "workspace": {}}
+        label = []
+        for (group, name, values), i in zip(axes, combo, strict=True):
+            value = values[i]
+            var[group][name] = value
+            text = str(value)
+            short = name.split(".")[-1]
+            label.append(f"{short}={text}" if len(text) <= 12 and "\n" not in text else f"{short}#{i + 1}")
+        var["label"] = " ".join(label)
+        out.append({k: v for k, v in var.items() if v})
+    return out
+
+
+def licence_trouble(row: dict) -> str | None:
+    """The licence message of a run that could not start for lack of a CarMaker licence."""
+    for text in [row.get("error") or "", *(row.get("log_errors") or [])]:
+        if "licens" in text.lower():
+            return text[:300]
+    return None
+
+
+def abort_reason(errors: list[str]) -> str:
+    """The most telling line: CarMaker's own reason (e.g. the car left the road) before library noise."""
+    for key in ("leave", "left the", "spin", "stand", "abort"):
+        for e in errors:
+            if key in e.lower():
+                return e[:160]
+    return errors[0][:160]
+
+
+def _brief(row: dict) -> dict:
+    out: dict[str, Any] = {"label": row.get("label"), "valid": row.get("valid"),
+                           "status": row.get("end_status")}
+    if row.get("sectors"):
+        out["sectors"] = [s["time"] for s in row["sectors"]]
+    elif row.get("splits"):
+        out["splits"] = row["splits"]
+    for k, n in (("abort_reason", 160), ("error", 200)):
+        if row.get(k):
+            out[k] = str(row[k])[:n]
+    return out
+
+
+def metric(row: dict, rank_by: str) -> float | None:
+    """'sectors' (mean of the sector times), 'splits' (their sum), 'sim_time', or '<quantity>.<stat>'
+    (e.g. 'Car.v.max'). None when the run has no such value."""
+    if rank_by == "sectors":
+        times = [s["time"] for s in row.get("sectors") or []]
+        return sum(times) / len(times) if times and None not in times else None
+    if rank_by == "splits":
+        splits = row.get("splits") or []
+        return sum(splits) if splits and None not in splits else None
+    if rank_by == "sim_time":
+        return row.get("sim_time_s")
+    name, _, stat = rank_by.rpartition(".")
+    q = (row.get("quantities") or {}).get(name) or {}
+    v = q.get(stat)
+    return float(v) if isinstance(v, (int, float)) else None
+
+
 def _short(v: Any) -> Any:
     """Six significant digits: a result file's single-precision values carry no more."""
     return float(f"{v:.6g}") if isinstance(v, float) else v
@@ -80,10 +160,12 @@ class StudyRunner:
         self._n = 0
 
     # ---- public --------------------------------------------------------------------
-    def start(self, testrun: str, variations: list[dict[str, Any]], quantities: list[str] | None = None,
+    def start(self, testrun: str, variations: list[dict[str, Any]] | None = None,
+              quantities: list[str] | None = None,
               mode: str = "auto", scope: str = "base", max_run_s: float = 900.0,
               save_logs: bool = False, movie: bool = False, speed: float | None = None,
-              gates: list[float] | str | None = None, keep_open: bool = False) -> dict:
+              gates: list[float] | str | None = None, keep_open: bool = False,
+              grid: dict | None = None, close_open: bool = False) -> dict:
         if mode == "auto":  # found in use: cm4sl as the default failed where only standalone was ready
             try:
                 mode = "cm4sl" if self.session.backend.status().connected else "standalone"
@@ -96,6 +178,11 @@ class StudyRunner:
                                "cm_movie_open before the study")
         if save_logs and mode != "cm4sl":
             raise BackendError("save_logs needs the MATLAB-connected session (mode 'cm4sl')")
+        variations = list(variations or []) + grid_variations(grid or {})
+        if not variations:
+            raise BackendError("give variations, a grid, or both")
+        if len(variations) > MAX_RUNS:
+            raise BackendError(f"{len(variations)} runs: at most {MAX_RUNS} per study")
         runs = check_variations(variations, mode)
         markers = None
         if gates == "markers":  # the test run's trigger points, as the CarMaker instrument times them
@@ -122,6 +209,7 @@ class StudyRunner:
         names = sorted({n for v in runs for n in v["workspace"]})
         ws: dict[str, Any] = (self.session.workspace_check(names, scope) if names
                               else {"new": [], "overruled": []})
+        open_note = self._open_instances(mode, close_open)
         with self._lock:
             active = [s["id"] for s in self._studies.values() if s["state"] == "running"]
             if active:
@@ -149,6 +237,7 @@ class StudyRunner:
         out: dict[str, Any] = {"study": sid, "runs": len(runs), "state": "running", "mode": mode,
                                "note": "cm_study_wait blocks until the next run has finished; "
                                        "cm_study_status shows the table"}
+        out.update(open_note)
         used = {k for v in runs for k in v["keys"]}
         unknown = sorted(used - set(known_keys)) if known_keys is not None else []
         if unknown:
@@ -168,24 +257,38 @@ class StudyRunner:
                             "changes nothing")
         return out
 
-    def status(self, study: str | None = None, detail: str = "compact") -> dict:
-        """``compact``: what a caller needs while it waits (no parameter values, four statistics per
-        quantity). ``full``: everything, including every run's keys and workspace values."""
-        if detail not in ("compact", "full"):
-            raise BackendError("detail must be 'compact' or 'full'")
+    def status(self, study: str | None = None, detail: str = "compact", rank_by: str | None = None) -> dict:
+        """``brief``: one line per run (label, valid, status, sector times, short abort reason).
+        ``compact``: also the statistics per quantity and the result file. ``full``: everything,
+        including every run's keys and workspace values. ``rank_by`` adds a ranking (see ``metric``)."""
+        if detail not in ("brief", "compact", "full"):
+            raise BackendError("detail must be 'brief', 'compact' or 'full'")
         st = self._get(study)
         if detail == "full":
             out = {k: v for k, v in st.items() if k != "variations" and not k.startswith("_")}
             out["done"] = len(st["rows"])
-            return out
-        out = {k: st[k] for k in ("id", "state", "testrun", "total", "current_label", "started", "finished",
-                                  "cancelled", "error") if st.get(k) is not None}
-        out["done"] = len(st["rows"])
-        out["rows"] = [_compact(r) for r in st["rows"]]
+        else:
+            out = {k: st[k] for k in ("id", "state", "testrun", "total", "current_label", "started",
+                                      "finished", "cancelled", "error", "kept_open") if st.get(k) is not None}
+            out["done"] = len(st["rows"])
+            out["rows"] = [_brief(r) if detail == "brief" else _compact(r) for r in st["rows"]]
+        if rank_by:
+            out.update(self._ranking(st["rows"], rank_by))
         return out
 
+    @staticmethod
+    def _ranking(rows: list[dict], rank_by: str) -> dict:
+        desc = rank_by.startswith("-")
+        key = rank_by.lstrip("-")
+        ranked = sorted([(v, r["label"]) for r in rows
+                         if r.get("valid") and (v := metric(r, key)) is not None], reverse=desc)
+        return {"ranking": [{"label": label, key: round(v, 4)} for v, label in ranked],
+                "ranking_by": f"{key} ({'largest' if desc else 'smallest'} first; valid runs only)",
+                "not_ranked": [r["label"] for r in rows
+                               if not r.get("valid") or metric(r, key) is None]}
+
     def wait_progress(self, study: str | None = None, timeout_s: float = 45.0,
-                      until_done: bool = False) -> dict:
+                      until_done: bool = False, detail: str = "brief") -> dict:
         """Block until another run of the study has finished (or, ``until_done``, until the study has
         ended), at most ``timeout_s``. Returns the rows no earlier wait has returned: a cursor per
         study, so rows that finished between calls, or during a parallel call, are not lost."""
@@ -198,7 +301,7 @@ class StudyRunner:
                 not until_done and st.get("_delivered", 0) < len(st["rows"]) < st["total"]), timeout_s)
             first = st.get("_delivered", 0)
             st["_delivered"] = len(st["rows"])
-        out = self.status(st["id"])
+        out = self.status(st["id"], detail)
         out["waited_s"] = round(time.time() - t0, 1)
         out["rows"] = out["rows"][first:st["_delivered"]]
         out["new_rows"] = len(out["rows"])
@@ -235,6 +338,26 @@ class StudyRunner:
             return self.session.project.read("testrun", testrun, keys=["Vehicle"])["values"].get("Vehicle")
         except Exception:
             return None
+
+    def _open_instances(self, mode: str, close: bool) -> dict:
+        """Standalone programs this server left open (keep_open, start=false) each hold a licence: close
+        them on request, else name them (found in use: a study then failed run after run)."""
+        if mode != "standalone":
+            return {}
+        sa = self._standalone()
+        own = sa.own_instances() if hasattr(sa, "own_instances") else []
+        if not own:
+            return {}
+        if close:
+            for inst in own:
+                try:
+                    sa.close(inst["instance"])
+                except BackendError:
+                    pass
+            return {"closed_open": [i["instance"] for i in own]}
+        return {"open_instances": own,
+                "open_note": "each open instance holds a CarMaker licence; if runs fail for lack of one, "
+                             "close them (cm_standalone_close) or start with close_open=true"}
 
     def _driver_template(self, testrun: str) -> str | None:
         try:
@@ -343,11 +466,17 @@ class StudyRunner:
                 row["vehicle"] = var["keys"].get("Vehicle", st.get("vehicle"))
                 row["driver_template"] = var["keys"].get(_TEMPLATE, st.get("driver_template"))
                 if row.get("log_errors") and not row["valid"]:
-                    row["abort_reason"] = row["log_errors"][0]
+                    row["abort_reason"] = abort_reason(row["log_errors"])
                     row["log_errors"] = row["log_errors"][:5]
                 st["rows"].append(row)
                 self._save(st)
-            st["state"] = "cancelled" if cancel.is_set() else "done"
+                trouble = licence_trouble(row)
+                if trouble:  # every further run would fail the same way
+                    st["error"] = (f"stopped after run {i + 1}: no CarMaker licence ({trouble}). Close the "
+                                   "programs that hold one (cm_standalone_servers, cm_standalone_close), or "
+                                   "start the study again with close_open=true")
+                    break
+            st["state"] = "failed" if st.get("error") else "cancelled" if cancel.is_set() else "done"
         except Exception as e:  # a bug must not leave the study 'running' for ever
             st["state"], st["error"] = "failed", f"{type(e).__name__}: {e}"
         finally:

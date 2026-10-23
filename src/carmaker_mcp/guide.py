@@ -79,7 +79,7 @@ test-run keys in memory, no file is edited. Close with `cm_standalone_close`.
 
 ## Change parameters
 * Project files (test run, vehicle, driver, tyre): `cm_read`, then `cm_edit(kind, name, {key: value})`.
-  Load the test run again afterwards.
+  Load the test run again afterwards. `cm_diff(kind, a, b)` compares two files (two vehicles, a clone).
 * Controller parameters usually live in the Simulink **model workspace**:
   `cm_list_workspace_vars(scope=<model>)`, `cm_get_workspace_var`, `cm_set_workspace_var(name, value, scope=<model>)`.
   They change in memory only; `cm_model_save` persists them. A variable the model has in its own workspace
@@ -89,7 +89,10 @@ test-run keys in memory, no file is edited. Close with `cm_standalone_close`.
   the base and model workspaces. `cm_start_sim(save_logs=true)` and `cm_study_start(..., save_logs=true)`
   do that for every run (`logs_file` in the result).
 * Several settings of one test run: `cm_study_start` runs them one after another. Wait with `cm_study_wait`
-  (not `cm_wait_end`); `cm_study_status` gives one short row per run, with its label and result file.
+  (not `cm_wait_end`, at most 50 s per call); it answers one brief line per run. `cm_study_status` gives
+  the table with result files, and `rank_by='sectors'` (or `'Car.v.max'`, ...) ranks the valid runs.
+  `grid` runs every combination of value lists (a g-g table is one value). A study stops at the first run
+  that finds no CarMaker licence; programs the server left open hold one (`close_open=true`).
   Only one study runs on a CarMaker session at a time, also across conversations: `cm_status` shows
   `study_running`, and loads, starts and stops are refused meanwhile. Cancel only a study you started.
 * A new file (a tyre property file with other values, for example): `cm_clone` to copy and `cm_edit` to change
@@ -118,8 +121,12 @@ Data/Driver/Template, or is `TestRun` for the parametrization saved in the test 
 * Lap and sector times: a test run's trigger point markers (type DrivManTrigger: mode 1 starts the
   timing, 2 takes a time, 3 does both) are how CarMaker times a course such as a skid pad; it reports
   them as `DM.TriggerPoint.Time` and `.Id`. `cm_study_start(gates="markers")` gives each row these
-  `sectors`. Gates by hand belong on the road position `Vhcl.sRoad`: the odometer `Car.Distance` reads
-  long when the driver cuts a circle (about 15 ms per skid pad lap).
+  `sectors`: each is the time from the last reference marker to that marker, a lap time on a skid pad
+  (the second right and the second left circle), not a split within a lap. A run that left the road gets
+  `null`, not a time. `cm_results_crossings` on `Vhcl.sRoad` differs by a few ms, because it interpolates
+  the road position while CarMaker times at the step the trigger fires. Gates by hand belong on the road
+  position `Vhcl.sRoad`: the odometer `Car.Distance` reads long when the driver cuts a circle (about 15 ms
+  per skid pad lap).
 * `Driver.Acc.GGExp` is a table, one row per speed: `vel_kmh exp_acc exp_dec`, the exponents of the
   driver's g-g diagram when accelerating and braking. 1 is an ellipse (lateral and longitudinal
   acceleration traded against each other); larger values let the driver combine more of both, which is

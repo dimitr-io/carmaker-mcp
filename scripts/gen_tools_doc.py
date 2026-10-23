@@ -28,7 +28,7 @@ SECTIONS = [
                  "cm_results_export", "cm_output_quantities",
                  "cm_output_quantities_edit")),
     ("IPGMovie", "movie"),
-    ("Project data", ("cm_list", "cm_read", "cm_edit", "cm_clone", "cm_create",
+    ("Project data", ("cm_list", "cm_read", "cm_diff", "cm_edit", "cm_clone", "cm_create",
                       "cm_driver_adaption")),
     ("MATLAB workspace and Simulink", "matlab"),
     ("Standalone instances (no MATLAB)", "standalone"),

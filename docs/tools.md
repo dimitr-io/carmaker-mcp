@@ -27,14 +27,14 @@ Bring up a CarMaker for Simulink session as far as it is missing: start MATLAB (
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
 | `model` | string or null | null | Simulink model to open: a name on the MATLAB path, a path as listed in models_found, or a full path (default: CM_MODEL) |
-| `max_wait_s` | number | `45.0` | Longest time to wait in seconds; keep it below your client's tool time-out and call again if not finished |
+| `max_wait_s` | number | `45.0` | Longest time to wait in s, at most 50 (larger values are cut to 50); call again if not finished |
 | `init` | string or null | null | The project's own MATLAB setup script, run once per MATLAB session before the model is opened (default: CM_MATLAB_INIT). A name from init_scripts_found, or a full path |
 
 ### `cm_doctor`
 
 *Check the setup* · read-only
 
-Check the setup: CarMaker install, Python version, MATLAB release and engine, shared MATLAB session, GUI, project folder. Each failed check comes with its fix.
+Check the setup: CarMaker install, Python version, MATLAB release and engine, shared MATLAB session, GUI, project folder. Each failed check comes with its fix. ok: at least one mode is ready (see ready); all_checks_passed: everything, the MATLAB session included.
 
 ### `cm_guide`
 
@@ -96,7 +96,7 @@ Wait until the simulation is idle again. finished=true: end status, simulation t
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
-| `timeout_s` | number | `45.0` | Longest time to wait in seconds; keep it below your client's tool time-out and call again if not finished |
+| `timeout_s` | number | `45.0` | Longest time to wait in s, at most 50 (larger values are cut to 50); call again if not finished |
 | `poll_s` | number | `1.0` | Seconds between status polls |
 
 ### `cm_log`
@@ -308,7 +308,7 @@ Names of project data files of one kind (test runs, vehicles, drivers, tyres...)
 
 *Read a project data file* · read-only
 
-Key / value pairs of a CarMaker infofile. Large files are truncated: filter by keys or prefix. For a test run also `driver`: its driver template (or 'TestRun'), knowledge and main limits.
+Key / value pairs of a CarMaker infofile. Large files are truncated: filter by keys or prefix. For a test run `driver` comes first: its driver template (or 'TestRun'), knowledge and main limits.
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
@@ -316,6 +316,19 @@ Key / value pairs of a CarMaker infofile. Large files are truncated: filter by k
 | `name` | string | required | File name relative to the kind's folder, as cm_list returns it |
 | `keys` | list of string or null | null | Only these keys |
 | `prefix` | string or null | null | Only keys starting with this, e.g. 'Vehicle' or 'DrivMan.' |
+
+### `cm_diff`
+
+*Compare two project data files* · read-only
+
+Keys only in a, only in b, and those whose values differ ([a, b]), e.g. two vehicles or a test run and its clone.
+
+| Parameter | Type | Default | Meaning |
+|---|---|---|---|
+| `kind` | `testrun` \| `vehicle` \| `driver` \| `tire` \| `road` \| `trailer` \| `kinematics` \| `config` \| `chassis` \| `misc` \| `sensor` \| `traffic` \| `script` | required | Kind of project data; selects the folder below <project>/Data |
+| `a` | string | required | First file, relative to the kind's folder |
+| `b` | string | required | Second file |
+| `prefix` | string or null | null | Only keys starting with this |
 
 ### `cm_edit`
 
@@ -368,7 +381,7 @@ Let IPGDriver learn the car (basic) or the car on this circuit (race), and save 
 | `knowledge` | string or null | null | Knowledge set to learn into (default: the active one, else DefaultDriverKnowledge) |
 | `save` | boolean | `true` | Save the knowledge (template file or test run; backed up) |
 | `mode` | `auto` \| `cm4sl` \| `standalone` | `"auto"` | auto: the MATLAB session if connected |
-| `timeout_s` | number | `45.0` | Longest time to wait in seconds; keep it below your client's tool time-out and call again if not finished |
+| `timeout_s` | number | `45.0` | Longest time to wait in s, at most 50 (larger values are cut to 50); call again if not finished |
 
 ## MATLAB workspace and Simulink
 
@@ -564,7 +577,7 @@ Wait until the instance's simulation has finished. finished=true: simulation tim
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
 | `instance` | string or null | null | Standalone instance id such as 'sa1' (may be omitted while there is only one) |
-| `timeout_s` | number | `45.0` | Longest time to wait in seconds; keep it below your client's tool time-out and call again if not finished |
+| `timeout_s` | number | `45.0` | Longest time to wait in s, at most 50 (larger values are cut to 50); call again if not finished |
 
 ### `cm_standalone_dva_write`
 
@@ -605,13 +618,13 @@ Disconnect; for instances this server launched, also stop the CarMaker process.
 
 *Start a parameter study* · changes state
 
-Run one test run several times with different parameter values, one after another, in the background. Returns a study id at once; wait with cm_study_wait. Nothing is written to project files. The answer names values that will change nothing: keys_not_found, workspace_not_found and workspace_overruled (use scope=<model>); Driver.* keys that a driver template overrides are refused (use 'driver'). Rows give valid and wall_s, the clock time of the run.
+Run one test run several times with different parameter values, one after another, in the background. Returns a study id at once; wait with cm_study_wait. Nothing is written to project files. The answer names values that will change nothing: keys_not_found, workspace_not_found and workspace_overruled (use scope=<model>); Driver.* keys that a driver template overrides are refused (use 'driver'). Rows give valid and wall_s, the clock time of the run. A study stops at the first run that finds no CarMaker licence.
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
 | `testrun` | string | required | Test run relative to Data/TestRun |
-| `variations` | list of object | required | One entry per run: {'label': 'heavy', 'keys': {'Body.mass': 320}, 'workspace': {'Kp_yaw': 1.5}, 'driver': {'Driver.Acc.ayMax': 14, 'Driver.Acc.GGExp': '10 1.5 1.5\n90 5 5'}}. 'keys': infofile keys in memory for that run; 'workspace': MATLAB variables in 'scope', restored after the run; 'driver': driver template values, in a copy deleted after the run. All optional |
-| `quantities` | list of string or null | null | Quantities to summarise per run (default: Time, Car.v) |
+| `variations` | list of object or null | null | One entry per run: {'label': 'heavy', 'keys': {'Body.mass': 320}, 'workspace': {'Kp_yaw': 1.5}, 'driver': {'Driver.Acc.ayMax': 14, 'Driver.Acc.GGExp': '10 1.5 1.5\n90 5 5'}}. 'keys': infofile keys in memory for that run; 'workspace': MATLAB variables in 'scope', restored after the run; 'driver': driver template values, in a copy deleted after the run. All optional |
+| `quantities` | list of string or null | null | Quantities to summarise per run (default: Time, Car.v). Standalone they are also all its result file stores, besides what timing needs: list every quantity to plot later |
 | `mode` | `auto` \| `cm4sl` \| `standalone` | `"auto"` | cm4sl: the MATLAB-connected session. standalone: CarMaker without MATLAB (no 'workspace' values). auto: cm4sl if MATLAB is connected |
 | `scope` | string | `"base"` | 'base' for the MATLAB base workspace, or the name of a loaded Simulink model for that model's workspace |
 | `max_run_s` | number | `900.0` | A run is stopped after this wall time in s |
@@ -620,6 +633,8 @@ Run one test run several times with different parameter values, one after anothe
 | `speed` | number or null | null | x real time; omit for CarMaker's maximum. Slower only if the user asks |
 | `gates` | list of number \| string or null | null | 'markers': each row gets 'sectors', the times at the test run's trigger point markers (as CarMaker's lap timing). Or road positions in m: 'splits', the times between them |
 | `keep_open` | boolean | `false` | With movie: leave the last run in IPGMovie (close it with cm_standalone_close) |
+| `grid` | object or null | null | Every combination of value lists, added to variations: {'driver': {'Driver.Acc.ayMax': [12, 14], 'Driver.Acc.GGExp': ['10 1 1', '10 1.5 1.5 90 5 5']}, 'keys': {...}, 'workspace': {...}}; at most 100 runs |
+| `close_open` | boolean | `false` | standalone: first close the CarMaker programs this server left open (each holds a licence) |
 
 ### `cm_study_status`
 
@@ -630,19 +645,21 @@ State of a study (running, done, cancelled, failed) and one row per finished run
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
 | `study` | string or null | null | Study id (default: the latest) |
-| `detail` | `compact` \| `full` | `"compact"` | compact: per run its label, end status, time, distance, result file and min / max / mean / last of the quantities. full: also every run's keys and workspace values and all statistics |
+| `detail` | `brief` \| `compact` \| `full` | `"compact"` | brief: per run label, valid, end status, sector or split times, abort reason. compact: also time, distance, result file and min / max / mean / last of the quantities. full: also every run's keys, workspace values and all statistics |
+| `rank_by` | string or null | null | Rank the valid runs: 'sectors' (mean sector time), 'splits' (their sum), 'sim_time', or a quantity statistic such as 'Car.v.max'; '-' first for largest first |
 
 ### `cm_study_wait`
 
 *Wait for a parameter study* · read-only
 
-Wait until another run of the study has finished or the study has ended, at most timeout_s, and return the rows no earlier call returned (cm_study_status has the whole table). Call it again while state is 'running'. Use this for studies instead of cm_wait_end.
+Wait until another run of the study has finished or the study has ended, at most timeout_s, and return the rows no earlier call returned (cm_study_status has the whole table and rank_by). Call it again while state is 'running'. Use this for studies instead of cm_wait_end.
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
 | `study` | string or null | null | Study id (default: the latest) |
-| `timeout_s` | number | `45.0` | Longest time to wait in seconds; keep it below your client's tool time-out and call again if not finished |
+| `timeout_s` | number | `45.0` | Longest time to wait in s, at most 50 (larger values are cut to 50); call again if not finished |
 | `until_done` | boolean | `false` | Return only when the study has ended (or at timeout_s) |
+| `detail` | `brief` \| `compact` \| `full` | `"brief"` | brief: per run label, valid, end status, sector or split times, abort reason. compact: also time, distance, result file and min / max / mean / last of the quantities. full: also every run's keys, workspace values and all statistics |
 
 ### `cm_study_cancel`
 

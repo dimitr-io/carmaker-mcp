@@ -554,6 +554,12 @@ class StandaloneManager:
 
         return self._call(go, 60)
 
+    def own_instances(self) -> list[dict]:
+        """Programs this server launched that are still open (each holds a CarMaker licence)."""
+        return [{"instance": i.id, "testrun": i.testrun, "finished": i.finished.is_set(),
+                 "movie": i.movie is not None}
+                for i in self.instances.values() if i.kind == "launched"]
+
     def close_all(self) -> None:
         for iid in list(self.instances):
             try:
