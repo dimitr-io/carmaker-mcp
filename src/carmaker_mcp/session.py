@@ -678,11 +678,20 @@ class Session:
             raise BackendError(
                 f"{name} is a {old['class']} object; set one of its fields instead (e.g. {name}.Value)"
             )
+        converted = False
+        if isinstance(value, str) and isinstance(old, (int, float)) and not isinstance(old, bool):
+            # found in use: 0.0 arrived as the text "0.0", and the model then failed to start
+            try:
+                value, converted = float(value), True
+            except ValueError:
+                pass
         self.backend.workspace_set(name, value, scope)
         new = self.backend.workspace_get(name, scope)
         self.store.log("workspace", name, scope=scope, old=old, new=new, existed=existed)
         out = {"scope": scope, "name": name, "old": old, "new": new, "existed": existed}
         notes = [] if scope == "base" else ["changed in memory only; save the model to persist"]
+        if converted:
+            notes.append("the value came as text and was set as the number it reads, like the old value")
         check: dict[str, Any] = self.workspace_check([name], scope) if scope == "base" else {"overruled": []}
         if check["overruled"]:
             out["overruled_by"] = check["model"]

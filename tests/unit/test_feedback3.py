@@ -89,3 +89,18 @@ def test_a_marker_study_finds_the_markers_a_short_read_leaves_out(session, proje
     r = runner.start("Sub/Laps", [{}], mode="standalone", gates="markers")
     assert "markers [1]" in r["sectors"]
     runner.wait()
+
+
+def test_compact_rows_keep_the_lap_times():
+    """Found in use: only brief rows showed lap_times, compact and full did not."""
+    from carmaker_mcp.study import _compact
+
+    assert _compact({"label": "a", "lap_times": [57.8, 57.4]})["lap_times"] == [57.8, 57.4]
+
+
+def test_a_number_sent_as_text_stays_a_number(session, mock):
+    """Found in use: 0.0 arrived as "0.0", was stored as text, and the model failed to start."""
+    session.workspace_set("Kp", 1.5)
+    r = session.workspace_set("Kp", "0.0")
+    assert r["new"] == 0.0 and "number" in r["note"]
+    assert session.workspace_set("Name", "abc")["new"] == "abc"  # text stays text

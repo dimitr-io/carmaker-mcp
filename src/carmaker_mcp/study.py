@@ -49,7 +49,7 @@ def check_variations(variations: list[dict[str, Any]], mode: str) -> list[dict[s
 
 
 _ROW = ("label", "valid", "abort_reason", "vehicle", "driver_template", "driver", "end_status",
-        "sim_time_s", "distance_m", "wall_s", "sectors", "splits", "gates_on",
+        "sim_time_s", "distance_m", "wall_s", "lap_times", "sectors", "splits", "gates_on",
         "result_file", "logs_file", "stopped", "error", "logs_error", "log_errors", "log_warnings",
         "restore_errors", "missing_quantities", "result_error", "gates_error", "kept_open")
 _STATS = ("min", "max", "mean", "last")
