@@ -21,6 +21,9 @@ parameters may still change between minor versions.
 - `cm_study_start(rerun={"study": id, "labels": [...]})` runs rows of an earlier study again, for example
   the best one with `movie=true, keep_open=true`. A movie study reuses the program and IPGMovie window an
   earlier study kept open instead of closing it.
+- A driver adaption ends what the server's own CarMaker GUI started: a race adaption opened IPGMovie by
+  itself, which stayed open after the GUI closed. A race adaption's answer names the `learning_rate` used
+  (the knowledge's own LearningRate field is not changed by it).
 - `cm_read` of a test run says whether its vehicle can run standalone (`standalone`, `simulink_parts`:
   parts of kind `CM4SL`); `cm_standalone_launch` and standalone studies refuse such a vehicle with that
   reason. `cm_read` also takes `search` (part of the key name) and `offset` for paging (`next_offset`).

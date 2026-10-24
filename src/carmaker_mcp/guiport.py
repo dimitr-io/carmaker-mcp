@@ -59,6 +59,48 @@ class GuiPort:
         return parse(data)
 
 
+def _processes() -> list[tuple[int, int, str]]:
+    """(pid, parent pid, exe name) of every process (Windows; empty elsewhere)."""
+    if sys.platform != "win32":
+        return []
+    import ctypes
+    from ctypes import wintypes
+
+    class Entry(ctypes.Structure):
+        _fields_ = [("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD),
+                    ("th32ProcessID", wintypes.DWORD), ("th32DefaultHeapID", ctypes.c_void_p),
+                    ("th32ModuleID", wintypes.DWORD), ("cntThreads", wintypes.DWORD),
+                    ("th32ParentProcessID", wintypes.DWORD), ("pcPriClassBase", ctypes.c_long),
+                    ("dwFlags", wintypes.DWORD), ("szExeFile", ctypes.c_wchar * 260)]
+
+    k32 = ctypes.windll.kernel32
+    k32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    snap = k32.CreateToolhelp32Snapshot(0x2, 0)  # TH32CS_SNAPPROCESS
+    out, e = [], Entry()
+    e.dwSize = ctypes.sizeof(Entry)
+    try:
+        ok = k32.Process32FirstW(snap, ctypes.byref(e))
+        while ok:
+            out.append((e.th32ProcessID, e.th32ParentProcessID, e.szExeFile))
+            ok = k32.Process32NextW(snap, ctypes.byref(e))
+    finally:
+        k32.CloseHandle(snap)
+    return out
+
+
+def descendants(pid: int) -> list[tuple[int, str]]:
+    """Processes started by ``pid``, and by those, and so on."""
+    procs = _processes()
+    found, todo = [], [pid]
+    while todo:
+        parent = todo.pop()
+        for child, ppid, exe in procs:
+            if ppid == parent and child != parent and all(child != f for f, _ in found):
+                found.append((child, exe))
+                todo.append(child)
+    return found
+
+
 class OwnGui:
     """A CarMaker GUI (HIL.exe) this server started for the project, with its simulation program."""
 
@@ -88,9 +130,13 @@ class OwnGui:
         """Stop its simulation program and end the GUI (nothing of the user's is in it)."""
         if self.proc is None:
             return
+        # What the GUI started, IPGMovie included: a race adaption opened IPGMovie by itself, and it
+        # stayed open after the GUI ended (found in use).
+        started = descendants(self.proc.pid)
         self.gui.tcl("Application stop", 60000)
-        try:
-            os.kill(self.proc.pid, signal.SIGTERM)
-        except OSError:
-            pass
+        for pid in [self.proc.pid, *(p for p, _ in started)]:
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except OSError:
+                pass
         self.proc = None

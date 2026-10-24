@@ -132,6 +132,10 @@ class Adaption:
         self.learning_rate, self.knowledge, self.save = learning_rate, knowledge, save
         self.max_run_s, self.before_save, self.after, self.poll_s = max_run_s, before_save, after, poll_s
         self.state: dict[str, Any] = {"state": "starting", "kind": kind}
+        if kind == "race":
+            # The command sets the adaption's rate; the knowledge keeps a LearningRate of its own, which
+            # it does not change (found live: 0.5 asked, the saved knowledge still said 0.75).
+            self.state["learning_rate"] = learning_rate
         self._cancel = threading.Event()
         self._done = threading.Event()
         self._thread: threading.Thread | None = None
