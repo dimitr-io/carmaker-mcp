@@ -92,6 +92,21 @@ def sim_end(lines: list[str]) -> dict | None:
     return None
 
 
+_LAP = re.compile(r"^\s*Lap\s+(\d+):\s+t=\s*([0-9.]+)s")
+
+
+def lap_times(lines: list[str]) -> list[float]:
+    """CarMaker's own lap times of a lap-driven run ('Lap   2: t=  59.564s ...' in the session log).
+    Found in use: DM.Lap.Time in the result file holds the last lap only after the next one starts, so a
+    run that ends with its last lap never stores that lap's time."""
+    laps: dict[int, float] = {}
+    for ln in lines:
+        mt = _LAP.match(ln)
+        if mt:
+            laps[int(mt[1])] = float(mt[2])
+    return [laps[k] for k in sorted(laps)]
+
+
 def dedupe(lines: list[str], limit: int = 10) -> list[str]:
     """Collapse repeated messages (a log can repeat one warning hundreds of times)."""
     counts: dict[str, int] = {}

@@ -52,7 +52,7 @@ A section of this server's guide (the same text as the resource carmaker://guide
 
 *Simulation status* · read-only
 
-Simulation state, active Simulink model, project directory, last end status, the GUI's storage mode (save_mode) and gui_all_saved (false: the GUI holds unsaved data and will ask before a load; true is no guarantee, an edit in an open editor window is not counted).
+The MATLAB session (CarMaker for Simulink) only; standalone work needs none of it (cm_doctor). Simulation state (sim_status; sim_status_code is CarMaker's raw value, -2 idle, 0 or more running), matlab_simstate (Simulink's model state: 'terminated' is normal when idle), active model, project directory, last end status, the GUI's storage mode (save_mode) and gui_all_saved (false: the GUI holds unsaved data and will ask before a load; true is no guarantee).
 
 ### `cm_load_testrun`
 
@@ -221,7 +221,7 @@ Plot quantities of result files in IPGControl, IPG's plotting program; needs no 
 
 *Times at which a quantity reaches values* · read-only
 
-Interpolated times at which a quantity crosses each value, and the time between the first crossings of consecutive values (lap or sector times from distance gates).
+Interpolated times at which a quantity crosses each value, and the time between the first crossings of consecutive values (lap or sector times from distance gates); with `at`, the values of other quantities there (the speed at 75 m).
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
@@ -229,12 +229,13 @@ Interpolated times at which a quantity crosses each value, and the time between 
 | `quantity` | string | required | e.g. 'Car.Distance' for gates along the course |
 | `values` | list of number | required | Values to find, e.g. gate distances in m |
 | `direction` | `any` \| `rising` \| `falling` | `"any"` | Which crossings |
+| `at` | list of string or null | null | Other quantities to read at each first crossing, e.g. ['Car.v', 'Car.ax'] |
 
 ### `cm_results_export`
 
 *Export a result file* · changes state
 
-Write quantities of a result file at full resolution (no thinning) to a MAT file (one double variable per quantity, dots as underscores, plus quantity_names and units) or a CSV file, in any folder of this computer. Never overwrites.
+Write quantities of a result file at full resolution (no thinning) to a MAT file (one double variable per quantity, dots as underscores, plus quantity_names and units) or a CSV file (header 'Time [s],Car.v [m/s],...': name and unit), in any folder of this computer. Never overwrites.
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
@@ -459,7 +460,7 @@ Save a loaded Simulink model. The file must be inside the project; it is backed 
 
 *Save Simulink's logged data to a MAT file* · changes state
 
-After a CarMaker for Simulink run: write what Simulink logged (signals marked for logging and To Workspace blocks) to a MAT file, with the base workspace and the model workspace as one struct each (variables: signals, base_workspace, model_workspace, info). Requires an idle simulation. The result file (.erg) holds CarMaker's quantities; this holds the Simulink side.
+After a CarMaker for Simulink run: write what Simulink logged (signals marked for logging and To Workspace blocks) to a MAT file, with the base workspace and the model workspace as one struct each (variables: signals, base_workspace, model_workspace, info); the answer lists signal_names. Requires an idle simulation. The result file (.erg) holds CarMaker's quantities, this the Simulink side. To see whether a signal is logged, run with save_logs=true and read signal_names.
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
@@ -523,7 +524,7 @@ Start a NEW independent CarMaker simulation program (not connected to MATLAB) an
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
 | `testrun` | string | required | Test run relative to Data/TestRun |
-| `overrides` | object or null | null | Test-run keys to change in memory only, e.g. {'Vehicle.DriverTemplate.FName': 'X'} |
+| `overrides` | object or null | null | Keys to change in memory only: test-run keys, 'Vehicle' (another car) and vehicle keys, e.g. {'Vehicle': 'Car_B', 'Body.mass': 300} |
 | `quantities` | list of string or null | null | Quantities to store (default: Time, Car.v, Car.YawRate, Car.ax, Car.ay, Car.Distance) |
 | `stop_after_s` | number or null | `600.0` | Safety stop at this simulation time in s (null: none) |
 | `executable` | string or null | null | CarMaker executable (default: the stock one of the install) |
@@ -542,7 +543,7 @@ Attach to a CarMaker simulation program that is already running, for example one
 |---|---|---|---|
 | `pid` | integer | required | Process id from cm_standalone_servers |
 | `testrun` | string or null | null | Test run to configure (needed to start a run) |
-| `overrides` | object or null | null | Test-run keys to change in memory only, e.g. {'Vehicle.DriverTemplate.FName': 'X'} |
+| `overrides` | object or null | null | Keys to change in memory only: test-run keys, 'Vehicle' (another car) and vehicle keys, e.g. {'Vehicle': 'Car_B', 'Body.mass': 300} |
 | `quantities` | list of string or null | null | Quantities to store |
 | `stop_after_s` | number or null | `600.0` | Safety stop at this simulation time in s |
 | `start` | boolean | `false` | Start the run at once (needs testrun) |
@@ -687,7 +688,7 @@ Recorded changes (file keys, workspace variables, model parameters, GUI settings
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
-| `session` | string or null | null | Session id (default: this session) |
+| `session` | string or null | null | Session id (default: this session; 'all' for every session) |
 | `limit` | integer | `100` | Newest entries to return |
 
 ### `cm_revert_all`

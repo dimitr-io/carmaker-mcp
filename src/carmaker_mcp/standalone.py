@@ -492,10 +492,13 @@ class StandaloneManager:
         if inst.project is not None and inst.log_mark is not None:
             lines = sessionlog.since(inst.project, inst.log_mark)
             errors = sessionlog.dedupe(sessionlog.filter_level(lines, "error"))
-            out: dict[str, list[str]] = {"log_errors": errors}
+            out: dict[str, Any] = {"log_errors": errors}
             warns = sessionlog.dedupe(sessionlog.warnings_only(lines), 5)
             if warns:
                 out["log_warnings"] = warns
+            laps = sessionlog.lap_times(lines)
+            if laps:
+                out["lap_times"] = laps
             return out
         return {"log_errors": [str(e).split("Message: ", 1)[-1][:200]  # attached: its own log only
                                for e in inst.sc.sessionlog.get_entries_with_pattern("*ERROR*")[-10:]]}

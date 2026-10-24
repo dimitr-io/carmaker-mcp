@@ -128,10 +128,12 @@ def abort_reason(errors: list[str]) -> str:
 def _brief(row: dict) -> dict:
     out: dict[str, Any] = {"label": row.get("label"), "valid": row.get("valid"),
                            "status": row.get("end_status")}
-    if row.get("sectors"):
-        out["sectors"] = [s["time"] for s in row["sectors"]]
+    if row.get("sectors"):  # named by their markers (asked for in use: which lap is which)
+        out["sectors"] = {f"{s.get('from', '?')}->{s['id']}": s["time"] for s in row["sectors"]}
     elif row.get("splits"):
         out["splits"] = row["splits"]
+    if row.get("lap_times"):
+        out["lap_times"] = row["lap_times"]
     for k, n in (("abort_reason", 160), ("error", 200)):
         if row.get(k):
             out[k] = str(row[k])[:n]
@@ -139,8 +141,11 @@ def _brief(row: dict) -> dict:
 
 
 def metric(row: dict, rank_by: str) -> float | None:
-    """'sectors' (mean of the sector times), 'splits' (their sum), 'sim_time', or '<quantity>.<stat>'
-    (e.g. 'Car.v.max'). None when the run has no such value."""
+    """'sectors' (mean of the sector times), 'splits' (their sum), 'laps' (the last lap of a lap-driven
+    run), 'sim_time', or '<quantity>.<stat>' (e.g. 'Car.v.max'). None when the run has no such value."""
+    if rank_by == "laps":
+        laps = row.get("lap_times") or []
+        return laps[-1] if laps else None
     if rank_by == "sectors":
         times = [s["time"] for s in row.get("sectors") or []]
         return sum(times) / len(times) if times and None not in times else None
@@ -213,7 +218,10 @@ class StudyRunner:
             markers = timing.trigger_markers(self.session.project.read("testrun", testrun,
                                                                          max_items=100000)["values"])
             if not any(m["mode"] in (2, 3) for m in markers):
-                raise BackendError(f"{testrun} has no trigger point markers that take a time (mode 2 or 3)")
+                raise BackendError(
+                    f"{testrun} has no trigger point markers that take a time (mode 2 or 3). On a course "
+                    "driven as laps leave gates out: every row has lap_times, CarMaker's own, and "
+                    "rank_by='laps' ranks by the last lap. Otherwise give road positions as gates")
             gates = None
         elif isinstance(gates, str):
             raise BackendError("gates is a list of road positions in m, or 'markers'")
@@ -616,7 +624,7 @@ class StudyRunner:
                     end = s.stop_sim(wait_s=60)
                     break
             for k in ("end_status", "sim_time_s", "distance_m", "result_file", "logs_file", "logs_error",
-                      "log_errors", "log_warnings", "popups"):
+                      "log_errors", "log_warnings", "popups", "lap_times"):
                 if end.get(k) is not None:
                     row[k] = end[k]
             row["wall_s"] = round(time.time() - t0, 1)
@@ -682,7 +690,7 @@ class StudyRunner:
                 if end.get(src) is not None:
                     row[dst] = end[src]
             row["wall_s"] = round(time.time() - t0, 1)
-            for k in ("log_errors", "log_warnings"):
+            for k in ("log_errors", "log_warnings", "lap_times"):
                 if end.get(k):
                     row[k] = end[k]
             files = sa.results(inst).get("result_files") or []

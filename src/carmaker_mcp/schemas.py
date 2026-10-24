@@ -32,6 +32,7 @@ class StatusResult(TypedDict, total=False):
     details: dict[str, Any]
     gui_all_saved: bool  # false: the GUI holds unsaved data and asks before a load (true: no guarantee)
     save_mode: str  # the GUI's storage mode: collect, save, hist_10, ...
+    standalone_note: str  # not connected: standalone work needs no MATLAB
 
 
 class StartResult(TypedDict, total=False):

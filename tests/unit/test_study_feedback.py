@@ -65,10 +65,10 @@ def test_waits_answer_briefly_and_status_ranks(session):
     w = runner.wait_progress(sid, 20, until_done=True)
     assert set(w["rows"][0]) == {"label", "valid", "status"}  # no statistics, no file paths
     st = runner._get(sid)
-    st["rows"][0]["sectors"] = [{"id": 1, "s": 1, "time": 5.5}, {"id": 3, "s": 2, "time": 5.3}]
+    st["rows"][0]["sectors"] = [{"id": 1, "from": 0, "s": 1, "time": 5.5}, {"id": 3, "from": 2, "s": 2, "time": 5.3}]
     st["rows"][1]["sectors"] = [{"id": 1, "s": 1, "time": 5.2}, {"id": 3, "s": 2, "time": 5.2}]
     r = runner.status(sid, "brief", rank_by="sectors")
-    assert r["rows"][0]["sectors"] == [5.5, 5.3]
+    assert r["rows"][0]["sectors"] == {"0->1": 5.5, "2->3": 5.3}  # named by their markers
     assert [x["label"] for x in r["ranking"]] == ["b", "a"] and r["ranking"][0]["sectors"] == 5.2
     st["rows"][1]["sectors"][0]["time"] = None  # left the road: not ranked
     r = runner.status(sid, rank_by="sectors")

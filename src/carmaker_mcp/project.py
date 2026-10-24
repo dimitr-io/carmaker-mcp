@@ -42,6 +42,22 @@ DRIVER_KEYS = (
 )
 
 
+def timing_summary(testrun: dict[str, str]) -> dict:
+    """How the test run ends and is timed: its manoeuvre end conditions, lap driving, and the trigger
+    point markers that take times (asked for in use: they sit at the end of a long file)."""
+    from .timing import trigger_markers
+
+    ends = sorted({v for k, v in testrun.items()
+                   if k.startswith("DrivMan.") and k.endswith(".EndCond") and v})
+    out: dict[str, Any] = {"end_conditions": ends}
+    if testrun.get("Driver.Course.LapDriving", "").strip() == "1":
+        out["lap_driving"] = True
+    markers = trigger_markers(testrun)
+    if markers:
+        out["markers"] = [{"id": m["id"], "s": round(m["s"], 3), "mode": m["mode"]} for m in markers]
+    return out
+
+
 class ProjectError(Exception):
     pass
 
@@ -112,12 +128,19 @@ class Project:
             d = {k: v for k, v in d.items() if k.startswith(prefix)}
         if search:  # a part of the key name, any case (asked for in use: a prefix read flooded the context)
             d = {k: v for k, v in d.items() if search.lower() in k.lower()}
+        left_out = 0
+        if kind == "testrun" and not (keys or prefix or search):
+            # found in use: the first page was road geometry and traffic, hundreds of keys
+            bulk = [k for k in d if k.startswith(("Road.", "Traffic."))]
+            left_out = len(bulk)
+            d = {k: v for k, v in d.items() if not k.startswith(("Road.", "Traffic."))}
         total = len(d)
         items = dict(list(d.items())[offset:offset + max_items])
         out: dict = {"kind": kind, "name": name, "infofile": True}
         if kind == "testrun":  # first: the values below may be overruled by its driver template
             out["driver"] = self.driver(info.to_dict())
             out.update(self.standalone_check(info.to_dict()))
+            out["timing"] = timing_summary(info.to_dict())
         out.update({"total_keys": total, "returned": len(items), "values": items})
         if offset + len(items) < total:
             out["next_offset"] = offset + len(items)
@@ -125,6 +148,9 @@ class Project:
                            f"offset={offset + len(items)}, or filter with keys, prefix or search")
         elif total == 0 and (keys or prefix or search):
             out["note"] = f"no key matches the filter; the file has {len(info.to_dict())} keys"
+        if left_out:
+            out["left_out"] = (f"{left_out} Road.* and Traffic.* keys (road geometry, traffic): read them "
+                               "with prefix='Road.' or 'Traffic.'")
         return out
 
     def standalone_check(self, testrun: dict[str, str], overrides: dict[str, Any] | None = None) -> dict:

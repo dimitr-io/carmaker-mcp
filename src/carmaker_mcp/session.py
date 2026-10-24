@@ -84,6 +84,7 @@ class Session:
         self.busy_with: str | None = None  # what holds the session besides a study (a driver adaption)
         self._adaption: Any = None  # the driver adaption of this session (adaption.Adaption)
         self._own_gui: Any = None  # the CarMaker GUI this server started for adaptions (guiport.OwnGui)
+        self.last_standalone_vehicle: str | None = None
         b: Any = backend
         if getattr(b, "diag_file", "") is None:  # a backend that can log Simulink's diagnostics
             b.diag_file = self.cfg.state_dir / "simulink-diagnostics.txt"
@@ -130,6 +131,9 @@ class Session:
         }
         if st.connected:
             out.update(self._gui_state())
+        else:  # found in use: agents read this as the whole server being down
+            out["standalone_note"] = ("this concerns the MATLAB session only: the cm_standalone_* tools and "
+                                      "standalone studies need no MATLAB (cm_doctor shows what is ready)")
         study = self.running_study()
         if study is not None:
             out["study_running"] = study
@@ -563,6 +567,9 @@ class Session:
         warns = sessionlog.dedupe(sessionlog.warnings_only(new), 5)
         if warns:
             out["log_warnings"] = warns
+        laps = sessionlog.lap_times(new)
+        if laps:
+            out["lap_times"] = laps
         if out["end_status"] == "failed":  # not for a stopped run: blocks raise harmless errors too
             sl = self._simulink_cause()
             if sl:
@@ -800,7 +807,7 @@ class Session:
             "variables": r.get("variables", []), "run": r.get("run") or None, "signals": r.get("signals", 0),
             "base_variables": r.get("base_variables", 0), "model_variables": r.get("model_variables", 0),
         }
-        for key in ("workspace_logs", "skipped", "notes"):
+        for key in ("signal_names", "workspace_logs", "skipped", "notes"):
             value = r.get(key)
             if value:
                 out[key] = value if isinstance(value, list) else [value]
@@ -959,6 +966,7 @@ class Session:
         except (OSError, ProjectError, GuardError):
             return  # the launch itself says what is wrong with the test run
         check = self.project.standalone_check(run, overrides)
+        self.last_standalone_vehicle = (overrides or {}).get("Vehicle") or run.get("Vehicle")
         if not check["standalone"]:
             parts = ", ".join(f"{k} = {v}" for k, v in check["simulink_parts"].items())
             raise BackendError(f"{testrun} uses a vehicle with Simulink parts ({parts}): it runs only in the "
@@ -990,6 +998,10 @@ class Session:
         if self._plot_pid:
             _end(self._plot_pid)
         res = plot.open_plot(exe, files, quantities, x, self.cfg.state_dir / "plot")
+        if not self._plot_pid:
+            import atexit
+
+            atexit.register(lambda: self._plot_pid and _end(self._plot_pid))  # ends with the server
         self._plot_pid = res["pid"]
         if picture:
             time.sleep(1.5)  # let IPGControl draw
@@ -1125,7 +1137,11 @@ class Session:
 
     # ---- change log, revert ------------------------------------------------
     def changelog(self, session: str | None = None, limit: int = 100) -> list[dict]:
-        return self.store.entries(session)[-limit:]
+        """This session's changes by default (found in use: older sessions' entries came back too);
+        'all' for every session."""
+        if session is None:
+            session = self.store.session
+        return self.store.entries(None if session == "all" else session)[-limit:]
 
     @_locked
     def revert_all(self) -> dict:

@@ -6,11 +6,17 @@ INSTRUCTIONS = (
     "Drives IPG CarMaker. Two ways to simulate: (1) the MATLAB-connected CarMaker for Simulink session "
     "(cm_* tools without 'standalone'), needed when the vehicle's controller is a Simulink model; "
     "(2) independent CarMaker processes without MATLAB (cm_standalone_* tools). "
-    "Typical run: cm_status, cm_load_testrun, cm_start_sim, then cm_wait_end repeatedly until "
+    "Start with cm_doctor: it says which way is ready. cm_status is about the MATLAB session only; "
+    "its 'No shared MATLAB session' does not concern standalone work. Typical run in the MATLAB "
+    "session: cm_status, cm_load_testrun, cm_start_sim, then cm_wait_end repeatedly until "
     "finished=true (it returns result_file), then cm_results_summary / cm_results_read. "
     "If nothing is running yet call cm_session_start; if a run fails read cm_log and cm_popups. "
+    "Typical run without MATLAB: cm_read of the test run (standalone: true, or override 'Vehicle' with a "
+    "car without Simulink parts), cm_standalone_launch, cm_standalone_wait_end, cm_standalone_results, "
+    "cm_standalone_close; cm_guide('standalone') has the rest. "
     "Typical study: cm_doctor (ready per mode), cm_read of the test run (its driver), cm_study_start "
-    "(variations, gates='markers' for lap times as CarMaker's own timing), cm_study_wait(until_done=true), "
+    "(variations, gates='markers' for lap times as CarMaker's own timing; on a lap-driven course rows "
+    "carry lap_times), cm_study_wait(until_done=true), "
     "then cm_results_crossings / cm_results_plot / cm_results_export. This server has no MATLAB evaluation: plot with cm_results_plot (IPGControl), or "
     "use a MATLAB server for MATLAB figures. "
     "Edits (cm_edit, cm_set_workspace_var, cm_model_set) change real project files and the live model: "
@@ -62,6 +68,9 @@ GUIDE = """\
 (`PT.Motor*.Trq`). A name CarMaker does not know is left out silently: check with `cm_results_summary(search=...)`.
 
 ## See the car (IPGMovie)
+Without MATLAB: `cm_standalone_launch(movie=true)` or `cm_study_start(mode="standalone", movie=true)`
+(one window for the whole study; `keep_open=true` leaves the last run in it, `rerun` shows a run again).
+The rest of this section is the MATLAB session:
 1. `cm_movie_open` BEFORE the run: IPGMovie records a run only while it is open.
 2. Run as usual, wait for the end.
 3. `cm_movie_snapshot(time_s=12.5, camera="Bird's Eye View")` returns a picture of that moment of the last run.
@@ -73,9 +82,22 @@ If a picture fails with an internal error of IPGMovie, try once more, then `cm_m
 CarMaker's programs show errors of their own in a dialog "Internal Debugger": `cm_popups` reads and closes it.
 
 ## Run without MATLAB (standalone)
-`cm_standalone_launch(testrun, overrides?, stop_after_s)` then `cm_standalone_wait_end` (repeat) and
-`cm_standalone_results`. Only for vehicles whose controller is built into CarMaker. `overrides` changes
-test-run keys in memory, no file is edited. Close with `cm_standalone_close`.
+For cars whose controllers are built into CarMaker. `cm_read` of a test run says `standalone: true` or
+names the Simulink parts (`PowerTrain.Control.Kind = CM4SL ...`) that need the MATLAB session; a launch or
+study refuses such a car. `cm_status` concerns only the MATLAB session.
+* One run: `cm_standalone_launch(testrun, overrides?, driver?, quantities?, movie?)`, then
+  `cm_standalone_wait_end` (repeat until finished), `cm_standalone_results` (the result file), and
+  `cm_standalone_close`. The answer names the `vehicle` it uses.
+* `overrides` changes keys in memory, nothing is written: test-run keys, `Vehicle` (another car), and
+  vehicle keys such as `Body.mass` (checked in the MATLAB session: a heavier car ran slower; plain and
+  `Vehicle:`-prefixed keys gave the same). `driver` takes Driver.* values (a temporary template copy).
+* `quantities` is what the result file stores (default Time, Car.v, Car.YawRate, Car.ax, Car.ay,
+  Car.Distance): list everything you will read or plot later.
+* `movie=true` shows the run in IPGMovie (no MATLAB needed); it closes with the program.
+* Several settings: `cm_study_start(mode="standalone", ...)`, with `movie`, `gates`, `driver` values and
+  `grid` as in the MATLAB session. One CarMaker licence serves one program at a time: an open MATLAB
+  session with CarMaker for Simulink, or a program left open, blocks standalone runs.
+* Runs go at maximum speed; `speed` slows them only when the user asks.
 
 ## Change parameters
 * Project files (test run, vehicle, driver, tyre): `cm_read`, then `cm_edit(kind, name, {key: value})`.
@@ -85,7 +107,11 @@ test-run keys in memory, no file is edited. Close with `cm_standalone_close`.
   They change in memory only; `cm_model_save` persists them. A variable the model has in its own workspace
   is not changed by setting one of the same name in the base workspace: the answer then says `overruled_by`.
 * The result file (.erg) holds CarMaker's quantities. What Simulink logged (signals marked for logging,
-  To Workspace blocks) is saved after the run with `cm_model_logs_save`: one MAT file with the signals and
+  To Workspace blocks) is saved after the run with `cm_model_logs_save`; its answer lists the
+  `signal_names`, so to find out whether a signal is logged just run with `save_logs=true` and look,
+  rather than searching the model (found in use: an agent searched the model file, missed the marks and
+  wrongly concluded that signals were not logged). Elements of a bus are named in angle brackets, e.g.
+  `<SR_FL>`. A signal not in the list is not logged: say so and ask the user to mark it for logging. one MAT file with the signals and
   the base and model workspaces. `cm_start_sim(save_logs=true)` and `cm_study_start(..., save_logs=true)`
   do that for every run (`logs_file` in the result).
 * Several settings of one test run: `cm_study_start` runs them one after another. Wait with `cm_study_wait`
@@ -127,12 +153,20 @@ Data/Driver/Template, or is `TestRun` for the parametrization saved in the test 
 * Lap and sector times: a test run's trigger point markers (type DrivManTrigger: mode 1 starts the
   timing, 2 takes a time, 3 does both) are how CarMaker times a course such as a skid pad; it reports
   them as `DM.TriggerPoint.Time` and `.Id`. `cm_study_start(gates="markers")` gives each row these
-  `sectors`: each is the time from the last reference marker to that marker, a lap time on a skid pad
+  `sectors`, named `from->id` by their markers (`0->1`: from reference marker 0 to marker 1; `cm_read`
+  of the test run lists them under `timing`): each is the time from the last reference marker to that
+  marker, a lap time on a skid pad
   (the second right and the second left circle), not a split within a lap. A run that left the road gets
   `null`, not a time. `cm_results_crossings` on `Vhcl.sRoad` differs by a few ms, because it interpolates
   the road position while CarMaker times at the step the trigger fires. Gates by hand belong on the road
   position `Vhcl.sRoad`: the odometer `Car.Distance` reads long when the driver cuts a circle (about 15 ms
   per skid pad lap).
+* A course driven as laps (`Driver.Course.LapDriving = 1`, end condition such as `DM.Lap.No >= 2`) has
+  no timing markers: every run's answer and study row then has `lap_times`, CarMaker's own from its log
+  (`rank_by='laps'` ranks by the last lap). `DM.Lap.Time` in the result file is the last finished lap
+  only once the next one has started, so a run that ends with its last lap never stores that lap's time.
+* CarMaker does not report which end condition ended a run; `cm_read` of the test run lists them under
+  `timing.end_conditions`.
 * `Driver.Acc.GGExp` is a table, one row per speed: `vel_kmh exp_acc exp_dec`, the exponents of the
   driver's g-g diagram when accelerating and braking. 1 is an ellipse (lateral and longitudinal
   acceleration traded against each other); larger values let the driver combine more of both, which is

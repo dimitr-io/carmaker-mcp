@@ -213,8 +213,9 @@ Instance = Annotated[str | None, Field(description="Standalone instance id such 
                                                    "omitted while there is only one)")]
 ErgPath = Annotated[str, Field(description="Result file (.erg): absolute path, or relative to the project")]
 def _from_json_text(v: Any) -> Any:
-    """A list or object some clients send as JSON text (found in use: gates=[...] arrived as a string)."""
-    if isinstance(v, str) and v.strip()[:1] in ("[", "{"):
+    """A list or object some clients send as JSON text (found in use: gates=[...] arrived as a string),
+    or a JSON string such as '"markers"' with its quotes."""
+    if isinstance(v, str) and v.strip()[:1] in ("[", "{", '"'):
         try:
             return json.loads(v)
         except ValueError:
@@ -241,9 +242,10 @@ Detail = Annotated[Literal["brief", "compact", "full"],
 RankBy = Annotated[str | None, Field(description="Rank the valid runs: 'sectors' (mean sector time), "
                                                  "'splits' (their sum), 'sim_time', or a quantity statistic "
                                                  "such as 'Car.v.max'; '-' first for largest first")]
-Overrides = Annotated[dict[str, Any] | None, Field(description="Test-run keys to change in memory only, "
-                                                               "e.g. {'Vehicle.DriverTemplate.FName': "
-                                                               "'X'}"), JsonText]
+Overrides = Annotated[dict[str, Any] | None, Field(description="Keys to change in memory only: test-run "
+                                                               "keys, 'Vehicle' (another car) and vehicle "
+                                                               "keys, e.g. {'Vehicle': 'Car_B', "
+                                                               "'Body.mass': 300}"), JsonText]
 
 
 # ---- setup ---------------------------------------------------------------------------
@@ -278,9 +280,11 @@ def cm_doctor() -> dict:
 # ---- status and run control -----------------------------------------------------------
 @_tool(READ, "Simulation status")
 def cm_status() -> StatusResult:
-    """Simulation state, active Simulink model, project directory, last end status, the GUI's storage
-    mode (save_mode) and gui_all_saved (false: the GUI holds unsaved data and will ask before a load;
-    true is no guarantee, an edit in an open editor window is not counted)."""
+    """The MATLAB session (CarMaker for Simulink) only; standalone work needs none of it (cm_doctor).
+    Simulation state (sim_status; sim_status_code is CarMaker's raw value, -2 idle, 0 or more running),
+    matlab_simstate (Simulink's model state: 'terminated' is normal when idle), active model, project
+    directory, last end status, the GUI's storage mode (save_mode) and gui_all_saved (false: the GUI
+    holds unsaved data and will ask before a load; true is no guarantee)."""
     return S().status()  # type: ignore[return-value]
 
 
@@ -461,8 +465,8 @@ def cm_results_export(
     format: Annotated[Literal["mat", "csv"], Field(description="When file is not given")] = "mat",
 ) -> dict:
     """Write quantities of a result file at full resolution (no thinning) to a MAT file (one double
-    variable per quantity, dots as underscores, plus quantity_names and units) or a CSV file, in any
-    folder of this computer. Never overwrites."""
+    variable per quantity, dots as underscores, plus quantity_names and units) or a CSV file (header
+    'Time [s],Car.v [m/s],...': name and unit), in any folder of this computer. Never overwrites."""
     return S().results_export(erg, quantities, t_min, t_max, file, format)
 
 
@@ -534,11 +538,14 @@ def cm_results_crossings(
     values: Annotated[list[float], Field(description="Values to find, e.g. gate distances in m",
                                          min_length=1, max_length=100), JsonText],
     direction: Annotated[Literal["any", "rising", "falling"], Field(description="Which crossings")] = "any",
+    at: Annotated[list[str] | None, Field(description="Other quantities to read at each first "
+                                                      "crossing, e.g. ['Car.v', 'Car.ax']"), JsonText] = None,
 ) -> dict:
     """Interpolated times at which a quantity crosses each value, and the time between the first
-    crossings of consecutive values (lap or sector times from distance gates)."""
+    crossings of consecutive values (lap or sector times from distance gates); with `at`, the values of
+    other quantities there (the speed at 75 m)."""
     try:
-        return S().erg(erg).crossings(quantity, values, direction)
+        return S().erg(erg).crossings(quantity, values, direction, at=at)
     except ErgError as e:
         raise BackendError(str(e)) from e
 
@@ -707,7 +714,7 @@ def cm_get_workspace_var(
     scope: Scope = "base",
 ) -> Any:
     """Value of a variable or field. MATLAB objects are described, not converted: read their fields."""
-    return S().workspace_get(name, scope)
+    return {"name": name, "scope": scope, "value": S().workspace_get(name, scope)}
 
 
 @_tool(DESTRUCTIVE, "Set a workspace variable")
@@ -770,8 +777,9 @@ def cm_model_logs_save(
 ) -> dict:
     """After a CarMaker for Simulink run: write what Simulink logged (signals marked for logging and
     To Workspace blocks) to a MAT file, with the base workspace and the model workspace as one struct
-    each (variables: signals, base_workspace, model_workspace, info). Requires an idle simulation.
-    The result file (.erg) holds CarMaker's quantities; this holds the Simulink side."""
+    each (variables: signals, base_workspace, model_workspace, info); the answer lists signal_names.
+    Requires an idle simulation. The result file (.erg) holds CarMaker's quantities, this the Simulink
+    side. To see whether a signal is logged, run with save_logs=true and read signal_names."""
     return S().model_logs_save(file, model, logs, format, base_workspace, model_workspace, overwrite,
                                timeout_s=timeout_s)
 
@@ -835,9 +843,11 @@ def cm_standalone_launch(
     S().require_standalone(testrun, overrides)
     overrides, temp = S().standalone_driver(testrun, dict(overrides or {}), driver)
     try:
-        return SA().launch(testrun, overrides=overrides or None, quantities=quantities,
-                           stop_after_s=stop_after_s, executable=executable, start=start, movie=movie,
-                           realtime_factor=speed, temp_files=temp)
+        out = SA().launch(testrun, overrides=overrides or None, quantities=quantities,
+                          stop_after_s=stop_after_s, executable=executable, start=start, movie=movie,
+                          realtime_factor=speed, temp_files=temp)
+        out["vehicle"] = S().last_standalone_vehicle  # asked for in use: did the override apply?
+        return out
     except Exception:
         for p in temp:  # found live: a failed launch left its template copy in the project
             p.unlink(missing_ok=True)
@@ -1014,7 +1024,8 @@ def cm_study_cancel(
 # ---- history -------------------------------------------------------------------------------
 @_tool(READ, "Change log")
 def cm_changelog(
-    session: Annotated[str | None, Field(description="Session id (default: this session)")] = None,
+    session: Annotated[str | None, Field(description="Session id (default: this session; 'all' for "
+                                                     "every session)")] = None,
     limit: Annotated[int, Field(description="Newest entries to return", ge=1, le=1000)] = 100,
 ) -> list[dict]:
     """Recorded changes (file keys, workspace variables, model parameters, GUI settings) with old and

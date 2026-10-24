@@ -168,9 +168,11 @@ class Erg:
                 "variables": {n: _mat_name(n) for n in names} if fmt == ".mat" else None,
                 "skipped": skipped or None}
 
-    def crossings(self, name: str, values: list[float], direction: str = "any", limit: int = 20) -> dict:
+    def crossings(self, name: str, values: list[float], direction: str = "any", limit: int = 20,
+                  at: list[str] | None = None) -> dict:
         """Times (linearly interpolated) at which a quantity reaches each value; for a distance
-        quantity these are gate times. ``direction``: any, rising or falling."""
+        quantity these are gate times. ``direction``: any, rising or falling. ``at``: other quantities,
+        interpolated at the first crossing (e.g. the speed at 75 m)."""
         if direction not in ("any", "rising", "falling"):
             raise ErgError("direction must be any, rising or falling")
         x = self.column(name).astype(float)
@@ -184,7 +186,11 @@ class Erg:
             for i in np.flatnonzero(hit)[:limit]:
                 f = 0.0 if x[i + 1] == x[i] else (v - x[i]) / (x[i + 1] - x[i])
                 times.append(float(t[i] + f * (t[i + 1] - t[i])))
-            out.append({"value": v, "times": times, "first": times[0] if times else None})
+            hit_at: dict = {"value": v, "times": times, "first": times[0] if times else None}
+            if at and times:
+                hit_at["at_first"] = {q: _num(np.interp(times[0], t, self.column(q).astype(float)))
+                                      for q in at}
+            out.append(hit_at)
         firsts = [c["first"] for c in out]
         pairs = zip(firsts[:-1], firsts[1:], strict=True)
         between = [None if a is None or b is None else b - a for a, b in pairs]

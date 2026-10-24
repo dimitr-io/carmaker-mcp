@@ -12,7 +12,7 @@ SAVE_LOGS = '''function out = cm_mcp_save_logs(file, model, logsFrom, fmt, wantB
 %   base_workspace, model_workspace   one struct per workspace, one field per variable
 %   info             model, run, date
 %   Returns a JSON text describing what was saved.
-r = struct('run', '', 'signals', 0, 'workspace_logs', {{}}, 'base_variables', 0, ...
+r = struct('run', '', 'signals', 0, 'signal_names', {{}}, 'workspace_logs', {{}}, 'base_variables', 0, ...
            'model_variables', 0, 'skipped', {{}}, 'notes', {{}});
 S = struct();
 info = struct('model', model, 'saved', char(datetime('now', 'Format', 'yyyy-MM-dd HH:mm:ss')), ...
@@ -26,6 +26,12 @@ if any(strcmp(logsFrom, {'inspector', 'both'}))
     else
         r.run = run.Name;
         info.run = run.Name;
+        names = cell(1, run.SignalCount);  % what was logged, so a caller need not search the model
+        for k = 1:run.SignalCount
+            names{k} = char(run.getSignalByIndex(k).Name);
+        end
+        names = unique(names(~cellfun(@isempty, names)));
+        r.signal_names = names(1:min(end, 300));
         if strcmp(fmt, 'struct')
             S.signals = localSignals(run);
             r.signals = numel(S.signals);

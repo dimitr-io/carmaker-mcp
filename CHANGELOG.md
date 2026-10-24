@@ -21,6 +21,19 @@ parameters may still change between minor versions.
 - `cm_study_start(rerun={"study": id, "labels": [...]})` runs rows of an earlier study again, for example
   the best one with `movie=true, keep_open=true`. A movie study reuses the program and IPGMovie window an
   earlier study kept open instead of closing it.
+- Five agents (Haiku, xhigh) each did a task with the server and reported what was hard. From that:
+  - Every run's answer and study row on a lap-driven course has `lap_times`, CarMaker's own from its log
+    (`rank_by='laps'`): the result file never holds the last lap of a run that ends with it.
+  - `cm_read` of a test run leaves the road geometry and traffic keys out unless asked for (`left_out`
+    says how many) and gives `timing`: end conditions, lap driving, the timing markers.
+  - `cm_results_crossings(at=[...])` gives other quantities at each first crossing (the speed at 75 m).
+  - `cm_model_logs_save` (and `save_logs`) answers with the logged `signal_names`.
+  - Sector times are named by their markers in brief rows (`0->1`); sectors carry `from`.
+  - `cm_standalone_launch` names the `vehicle` it uses; `cm_get_workspace_var` names the variable and
+    scope it read; an IPGControl plot window closes with the server.
+  - The server instructions describe the standalone route, and `cm_status` without MATLAB says that
+    standalone work needs none; the guide's standalone and IPGMovie sections cover studies, driver
+    values, vehicle keys in overrides (checked in the MATLAB session), quantities and `movie=true`.
 - Standalone driver adaptions share one CarMaker GUI of the server's own, instead of one opened and closed
   per adaption; between adaptions only its simulation program is stopped, so the CarMaker licence is free
   for standalone runs. `cm_driver_adaption(action="close")` ends it (it also ends with the server). An
@@ -130,6 +143,8 @@ parameters may still change between minor versions.
   least half the road between the markers (found in use: two markers fired 10 ms apart as the car left
   the road); otherwise `null`. Rechecked on 152 recorded rows: the 15 aborted ones with 0.001 s are now
   `null`, no completed run changed.
+- `cm_changelog` without `session` returned every session's changes; it now returns this session's
+  (`session="all"` for every one). A JSON string sent with its quotes (`"\"markers\""`) is read too.
 - List and object parameters sent as JSON text are read (found in use: `gates=[...]` arrived as a string
   from a client and was refused).
 - A standalone study with `movie=true` started a new program and IPGMovie for every run, so the window
