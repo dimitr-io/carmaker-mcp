@@ -75,7 +75,7 @@ Start the loaded test run. Returns once it is running; fails at once, with Simul
 |---|---|---|---|
 | `start_timeout_s` | number | `90.0` | How long the start may take (a Simulink model may compile first) |
 | `save` | `save` \| `collect` \| `keep` | `"save"` | save: write a result file (GUI storage mode becomes 'Save all', cm_revert_all puts it back). collect: buffer only. keep: leave the GUI setting alone |
-| `save_logs` | boolean | `false` | Also save what Simulink logged in this run to a MAT file next to the result file, as cm_model_logs_save does; cm_wait_end returns it as logs_file |
+| `save_logs` | boolean | `false` | Also save what Simulink logged in this run to a MAT file next to the result file (a Simulink Dataset, for MATLAB; for Python call cm_model_logs_save(format='struct', file=...)); cm_wait_end returns logs_file and logs_signal_names |
 | `speed` | number or null | null | x real time; omit for CarMaker's maximum. Slower only if the user asks |
 
 ### `cm_stop_sim`
@@ -281,7 +281,7 @@ Open IPGMovie, CarMaker's 3D animation window (or take over one that is open). O
 
 *Take a picture in IPGMovie* · changes state
 
-A picture of IPGMovie's 3D view, returned as an image. After a run it shows any moment of the last run (time_s), provided IPGMovie was open during that run. During a run, without time_s, it shows the IPGMovie window as it is at that moment (in the window's own size). With erg it replays a saved result file, which must hold the vehicle's motion (cm_output_quantities_edit(preset='movie') before that run). Do not pass time_s during a run: that makes IPGMovie stop following the run.
+A picture of IPGMovie's 3D view, returned as an image. After a run it shows any moment of the last run (time_s), provided IPGMovie was open during that run. During a run, without time_s, it shows the IPGMovie window as it is at that moment (in the window's own size). With erg it replays a saved result file, which must hold the vehicle's motion (cm_output_quantities_edit(preset='movie') before that run). Do not pass time_s during a run: that makes IPGMovie stop following the run. Needs the MATLAB session's IPGMovie (cm_movie_open); a standalone IPGMovie (movie=true) has no pictures.
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
@@ -625,7 +625,7 @@ Run one test run several times with different parameter values, one after anothe
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
-| `testrun` | string | required | Test run relative to Data/TestRun |
+| `testrun` | string or null | null | Test run relative to Data/TestRun (with rerun: default its study's) |
 | `variations` | list of object or null | null | One entry per run: {'label': 'heavy', 'keys': {'Body.mass': 320}, 'workspace': {'Kp_yaw': 1.5}, 'driver': {'Driver.Acc.ayMax': 14, 'Driver.Acc.GGExp': '10 1.5 1.5\n90 5 5'}}. 'keys': infofile keys in memory for that run; 'workspace': MATLAB variables in 'scope', restored after the run; 'driver': driver template values, in a copy deleted after the run. All optional |
 | `quantities` | list of string or null | null | Quantities to summarise per run (default: Time, Car.v). Standalone they are also all its result file stores, besides what timing needs: list every quantity to plot later |
 | `mode` | `auto` \| `cm4sl` \| `standalone` | `"auto"` | cm4sl: the MATLAB-connected session. standalone: CarMaker without MATLAB (no 'workspace' values). auto: cm4sl if MATLAB is connected |
@@ -638,6 +638,7 @@ Run one test run several times with different parameter values, one after anothe
 | `keep_open` | boolean | `false` | With movie: leave the last run in IPGMovie (close it with cm_standalone_close) |
 | `grid` | object or null | null | Every combination of value lists, added to variations: {'driver': {'Driver.Acc.ayMax': [12, 14]}, 'driver_scale': {'Driver.Acc.GGExp': [1, 2, 4]}, 'keys': {...}, 'workspace': {...}}. driver_scale multiplies the driver's own value (a table: all but its first column). At most 100 runs |
 | `close_open` | boolean | `false` | standalone: first close the CarMaker programs this server left open (each holds a licence) |
+| `keys` | object or null | null | Keys for every run, e.g. {'Vehicle': 'Car_B'}; a variation's own keys win |
 | `rerun` | object or null | null | Runs of an earlier study again: {'study': id, 'labels': ['best']}, e.g. with movie and keep_open to show the best run; an IPGMovie window kept open is reused |
 
 ### `cm_study_status`

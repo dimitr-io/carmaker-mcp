@@ -51,7 +51,7 @@ class WaitResult(TypedDict, total=False):
     stop_requested: bool
     # finished
     end_status: str | None
-    elapsed_s: float
+    elapsed_s: float  # wall time of this wait call, not of the run
     testrun: str
     sim_time_s: float
     distance_m: float

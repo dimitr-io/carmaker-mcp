@@ -19,7 +19,8 @@ from pathlib import Path
 
 _LEVELS = {"error": ("ERROR", "FATAL"), "warning": ("ERROR", "FATAL", "WARNING")}
 _LEVEL = re.compile(r"^\s*(FATAL|ERROR|WARNING)\b")
-_SIM_END = re.compile(r"^SIM_END\s+(?P<name>.*?)\s+(?P<time>[0-9.eE+-]+)s\s+(?P<dist>[0-9.eE+-]+)m\s*$")
+_SIM_END = re.compile(r"^(?P<how>SIM_END|SIM_ABORT)\s+(?P<name>.*?)\s+(?P<time>[0-9.eE+-]+)s\s+"
+                      r"(?P<dist>[0-9.eE+-]+)m\s*$")
 
 
 @dataclass(frozen=True)
@@ -88,7 +89,16 @@ def sim_end(lines: list[str]) -> dict | None:
     for ln in reversed(lines):
         mt = _SIM_END.match(ln)
         if mt:
-            return {"testrun": mt["name"], "sim_time_s": float(mt["time"]), "distance_m": float(mt["dist"])}
+            out: dict = {"testrun": mt["name"], "sim_time_s": float(mt["time"]),
+                         "distance_m": float(mt["dist"])}
+            if mt["how"] == "SIM_ABORT":  # found in use: the reason was only in the full log
+                errors = filter_level(lines, "error")
+                out["ended"] = "aborted"
+                if errors:
+                    out["end_reason"] = " ".join(errors[-1].split())[:200]
+            else:
+                out["ended"] = "end condition or stop"
+            return out
     return None
 
 

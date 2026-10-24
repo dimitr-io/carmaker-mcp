@@ -37,6 +37,22 @@ parameters may still change between minor versions.
   - Standalone launches and studies refuse keys of the vehicle file (`Body.mass`): checked live, a
     standalone run ignores them and gives the baseline result. The answer says how to make a vehicle
     variant (clone the vehicle, name it with `Vehicle`); in the MATLAB session such keys do apply.
+- A second round of five agents, on the code above. From it:
+  - Wait answers and study rows say how a run `ended` ("aborted" with `end_reason`, e.g. an empty
+    battery or the car leaving the road), which was only in the full log before.
+  - A standalone launch or study refuses a test run whose driver template does not exist (it used to
+    start, and the run stopped at once).
+  - `cm_wait_end` after `save_logs` lists `logs_signal_names`; the description says that file is a
+    Simulink Dataset for MATLAB and how to get one for Python.
+  - `cm_study_start(keys={...})` applies keys to every run (a variation's own win); `rerun` takes its test
+    run from the study it repeats.
+  - `cm_revert_all` names what it undid (`workspace Kp`), not only entry ids.
+  - Study status rows (compact, full) keep `lap_times`; a workspace number sent as text stays a number
+    (found in use: "0.0" was stored as text and the model failed to start).
+  - Marker studies read the timing markers again: the shorter test-run read had hidden them and every
+    `gates="markers"` study was refused.
+  - Texts: the race driver still uses the g-g exponents; `cm_movie_snapshot` needs the MATLAB session's
+    IPGMovie; a MATLAB timeout no longer guesses "busy simulating?"; `elapsed_s` is the wait's own time.
 - Standalone driver adaptions share one CarMaker GUI of the server's own, instead of one opened and closed
   per adaption; between adaptions only its simulation program is stopped, so the CarMaker licence is free
   for standalone runs. `cm_driver_adaption(action="close")` ends it (it also ends with the server). An

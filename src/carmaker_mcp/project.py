@@ -172,6 +172,9 @@ class Project:
             out["simulink_parts"] = parts
         # Checked live: a standalone override of a vehicle key (Body.mass) changed nothing, the result
         # was identical to the baseline; standalone overrides reach only the test run's own keys.
+        template = run.get(DRIVER_TEMPLATE) or None
+        if template and template != "TestRun" and self._driver_source(run)[1] is None:
+            out["missing_driver_template"] = template
         vehicle_keys = sorted(k for k in (overrides or {})
                               if k.split(":", 1)[-1] in values and k.split(":", 1)[-1] not in testrun
                               and k != "Vehicle" and not k.startswith("Driver."))

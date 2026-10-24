@@ -499,6 +499,10 @@ class StandaloneManager:
             laps = sessionlog.lap_times(lines)
             if laps:
                 out["lap_times"] = laps
+            end = sessionlog.sim_end(lines) or {}
+            for k in ("ended", "end_reason"):
+                if end.get(k):
+                    out[k] = end[k]
             return out
         return {"log_errors": [str(e).split("Message: ", 1)[-1][:200]  # attached: its own log only
                                for e in inst.sc.sessionlog.get_entries_with_pattern("*ERROR*")[-10:]]}

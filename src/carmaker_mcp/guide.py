@@ -169,7 +169,8 @@ Data/Driver/Template, or is `TestRun` for the parametrization saved in the test 
   (`rank_by='laps'` ranks by the last lap). `DM.Lap.Time` in the result file is the last finished lap
   only once the next one has started, so a run that ends with its last lap never stores that lap's time.
 * CarMaker does not report which end condition ended a run; `cm_read` of the test run lists them under
-  `timing.end_conditions`.
+  `timing.end_conditions`. The wait answers say `ended`: "aborted" with `end_reason` (e.g. an empty
+  battery, the car leaving the road), or "end condition or stop".
 * `Driver.Acc.GGExp` is a table, one row per speed: `vel_kmh exp_acc exp_dec`, the exponents of the
   driver's g-g diagram when accelerating and braking. 1 is an ellipse (lateral and longitudinal
   acceleration traded against each other); larger values let the driver combine more of both, which is
@@ -196,7 +197,9 @@ driver is `TestRun`); defaults in brackets.
   the course (Basic adaption, then Race Driver Adaption on that track), and adapted again after any
   change to the car or the test run; with out-of-date knowledge the results differ. Its accelerations
   come from the knowledge (speed dependent table `Driver.Knowl.<i>.Vhcl.Acc`) and a slip controller
-  drives each tyre close to the learnt maximum slip; most standard fields are unused.
+  drives each tyre close to the learnt maximum slip; most standard fields are unused, but the g-g
+  exponents `Driver.Acc.GGExp` still shape how it combines lateral and longitudinal acceleration (found
+  in use: they changed an autocross lap by almost 2 s).
   Manual example (5.4, Hockenheim): race driver 93.2 s, standard driver with everyday limits 144.2 s.
 * Standard, user parameterised driver (`Driver.Mode = std`): for Acceleration, Skid Pad and other
   manoeuvres; FCM recommends it for FS cars (reproducible, tunable per discipline). Focus it on the task

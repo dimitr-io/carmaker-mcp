@@ -113,14 +113,16 @@ class Cm4slBackend:
                 except Exception:
                     pass
                 raise BackendTimeout(
-                    f"MATLAB did not answer {fn} within {timeout:.0f}s (busy simulating?)"
+                    f"MATLAB did not answer {fn} within {timeout:.0f}s (busy: a simulation, a setup script "
+                    "or a model still loading)"
                 ) from e
             except Exception as e:
                 msg = str(e)
                 # the engine has its own TimeoutError class, which is not the built-in one
                 if type(e).__name__ == "TimeoutError" or "timeout from execution" in msg.lower():
                     raise BackendTimeout(
-                        f"MATLAB did not answer {fn} within {timeout:.0f}s (busy simulating?)"
+                        f"MATLAB did not answer {fn} within {timeout:.0f}s (busy: a simulation, a setup "
+                        "script or a model still loading)"
                     ) from e
                 if attempt == 0 and ("closed" in msg.lower() or "not connected" in msg.lower()):
                     self._eng = None  # reconnect once

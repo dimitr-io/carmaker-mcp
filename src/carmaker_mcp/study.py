@@ -49,7 +49,8 @@ def check_variations(variations: list[dict[str, Any]], mode: str) -> list[dict[s
 
 
 _ROW = ("label", "valid", "abort_reason", "vehicle", "driver_template", "driver", "end_status",
-        "sim_time_s", "distance_m", "wall_s", "lap_times", "sectors", "splits", "gates_on",
+        "sim_time_s", "distance_m", "wall_s", "ended", "end_reason", "lap_times", "sectors", "splits",
+        "gates_on",
         "result_file", "logs_file", "stopped", "error", "logs_error", "log_errors", "log_warnings",
         "restore_errors", "missing_quantities", "result_error", "gates_error", "kept_open")
 _STATS = ("min", "max", "mean", "last")
@@ -185,12 +186,28 @@ class StudyRunner:
         self._n = 0
 
     # ---- public --------------------------------------------------------------------
-    def start(self, testrun: str, variations: list[dict[str, Any]] | None = None,
+    def start(self, testrun: str | None, variations: list[dict[str, Any]] | None = None,
               quantities: list[str] | None = None,
               mode: str = "auto", scope: str = "base", max_run_s: float = 900.0,
               save_logs: bool = False, movie: bool = False, speed: float | None = None,
               gates: list[float] | str | None = None, keep_open: bool = False,
-              grid: dict | None = None, close_open: bool = False, rerun: dict | None = None) -> dict:
+              grid: dict | None = None, close_open: bool = False, rerun: dict | None = None,
+              keys: dict[str, Any] | None = None) -> dict:
+        testrun = self._testrun(testrun, rerun)
+        return self._start(testrun, variations, quantities, mode, scope, max_run_s, save_logs, movie, speed,
+                           gates, keep_open, grid, close_open, rerun, keys)
+
+    def _testrun(self, testrun: str | None, rerun: dict | None) -> str:
+        if not testrun:  # a rerun names its own test run (asked for in use)
+            if not rerun:
+                raise BackendError("name the test run")
+            testrun = str(self._get(rerun.get("study"))["testrun"])
+        return testrun
+
+    def _start(self, testrun: str, variations: list[dict[str, Any]] | None, quantities: list[str] | None,
+               mode: str, scope: str, max_run_s: float, save_logs: bool, movie: bool, speed: float | None,
+               gates: list[float] | str | None, keep_open: bool, grid: dict | None, close_open: bool,
+               rerun: dict | None, keys: dict[str, Any] | None) -> dict:
         if mode == "auto":  # found in use: cm4sl as the default failed where only standalone was ready
             try:
                 mode = "cm4sl" if self.session.backend.status().connected else "standalone"
@@ -209,6 +226,8 @@ class StudyRunner:
             raise BackendError("give variations, a grid or rerun")
         if len(variations) > MAX_RUNS:
             raise BackendError(f"{len(variations)} runs: at most {MAX_RUNS} per study")
+        if keys:  # for every run; a variation's own keys win (asked for in use: Vehicle 98 times)
+            variations = [{**v, "keys": {**keys, **(v.get("keys") or {})}} for v in variations]
         runs = check_variations(variations, mode)
         if mode == "standalone":  # a car without Simulink parts, and no vehicle keys (ignored there)
             for v in runs:
@@ -626,7 +645,7 @@ class StudyRunner:
                     end = s.stop_sim(wait_s=60)
                     break
             for k in ("end_status", "sim_time_s", "distance_m", "result_file", "logs_file", "logs_error",
-                      "log_errors", "log_warnings", "popups", "lap_times"):
+                      "log_errors", "log_warnings", "popups", "lap_times", "ended", "end_reason"):
                 if end.get(k) is not None:
                     row[k] = end[k]
             row["wall_s"] = round(time.time() - t0, 1)
@@ -692,7 +711,7 @@ class StudyRunner:
                 if end.get(src) is not None:
                     row[dst] = end[src]
             row["wall_s"] = round(time.time() - t0, 1)
-            for k in ("log_errors", "log_warnings", "lap_times"):
+            for k in ("log_errors", "log_warnings", "lap_times", "ended", "end_reason"):
                 if end.get(k):
                     row[k] = end[k]
             files = sa.results(inst).get("result_files") or []

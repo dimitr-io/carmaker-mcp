@@ -157,7 +157,7 @@ def test_log_helpers(tmp_path):
     os.utime(newer, (later, later))
     assert sessionlog.since(tmp_path, m) == ["C" + TAB + "3"]
     assert sessionlog.sim_end(["SIM_END" + TAB + TAB + "My Runs/A B" + TAB + "1.5s" + TAB + "2m"]) == {
-        "testrun": "My Runs/A B", "sim_time_s": 1.5, "distance_m": 2.0}
+        "testrun": "My Runs/A B", "sim_time_s": 1.5, "distance_m": 2.0, "ended": "end condition or stop"}
     assert sessionlog.sim_end(["TIME" + TAB + "0.0"]) is None
 
 

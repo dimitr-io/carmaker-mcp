@@ -581,6 +581,8 @@ class Session:
                 try:
                     saved = self.model_logs_save(model=st.active_model)
                     out["logs_file"] = saved["file"]
+                    if saved.get("signal_names"):  # asked for in use: a second call only to see them
+                        out["logs_signal_names"] = saved["signal_names"]
                 except (BackendError, GuardError) as e:
                     out["logs_error"] = str(e)
         return out
@@ -976,6 +978,12 @@ class Session:
             return  # the launch itself says what is wrong with the test run
         check = self.project.standalone_check(run, overrides)
         self.last_standalone_vehicle = (overrides or {}).get("Vehicle") or run.get("Vehicle")
+        if check.get("missing_driver_template"):  # found in use: the launch started, the run failed
+            raise BackendError(
+                f"{testrun} names the driver template {check['missing_driver_template']!r}, which is not "
+                "in Data/Driver/Template: the run would stop at once. Override "
+                "Vehicle.DriverTemplate.FName with a template that exists (cm_list kind 'driver', without "
+                "'Template/') or 'TestRun' for the driver saved in the test run")
         if check.get("vehicle_keys"):
             raise BackendError(
                 f"{', '.join(check['vehicle_keys'])}: keys of the vehicle file, which a standalone run "
@@ -1166,7 +1174,7 @@ class Session:
                    and e["id"] not in self._reverted]
         if entries:
             self.require_idle("revert changes")
-        done, failed = [], []
+        done, failed, undone = [], [], []
         reloaded: set[str] = set()
         for e in entries:
             if e["kind"] == "model_struct" and e["model"] not in reloaded and e.get("file"):
@@ -1189,13 +1197,15 @@ class Session:
                     else:
                         self.backend.model_set(e["target"], e["param"], e["old"])
                 done.append(e["id"])
+                undone.append(f"{e['kind']} {e['target']}" + (f" {e['param']}" if e.get("param") else ""))
                 self._reverted.add(e["id"])
             except BackendError as ex:
-                failed.append({"id": e["id"], "error": str(ex)})
+                failed.append({"id": e["id"], "what": f"{e['kind']} {e['target']}", "error": str(ex)})
         failed += self.restore_gui_settings()
         files = self.store.restore_files()
         self.store.log("revert", "session", reverted=done, failed=[f["id"] for f in failed])
-        return {"reverted": done, "failed": failed, **files}
+        # names, not only entry ids (asked for in use: nine bare ids said nothing)
+        return {"reverted": undone, "failed": failed, **files}
 
     def restore_gui_settings(self) -> list[dict]:
         """Put the GUI settings this session changed (pop-up time-out, storage mode) back as they were.

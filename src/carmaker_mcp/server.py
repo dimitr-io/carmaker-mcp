@@ -309,8 +309,10 @@ def cm_start_sim(
                                       "cm_revert_all puts it back). collect: buffer only. keep: leave "
                                       "the GUI setting alone")] = "save",
     save_logs: Annotated[bool, Field(description="Also save what Simulink logged in this run to a MAT "
-                                                 "file next to the result file, as cm_model_logs_save "
-                                                 "does; cm_wait_end returns it as logs_file")] = False,
+                                                 "file next to the result file (a Simulink Dataset, for "
+                                                 "MATLAB; for Python call cm_model_logs_save(format="
+                                                 "'struct', file=...)); cm_wait_end returns logs_file and "
+                                                 "logs_signal_names")] = False,
     speed: Speed = None,
 ) -> StartResult:
     """Start the loaded test run. Returns once it is running; fails at once, with Simulink's error,
@@ -609,7 +611,8 @@ def cm_movie_snapshot(
     run (time_s), provided IPGMovie was open during that run. During a run, without time_s, it shows the
     IPGMovie window as it is at that moment (in the window's own size). With erg it replays a saved
     result file, which must hold the vehicle's motion (cm_output_quantities_edit(preset='movie') before
-    that run). Do not pass time_s during a run: that makes IPGMovie stop following the run."""
+    that run). Do not pass time_s during a run: that makes IPGMovie stop following the run. Needs the
+    MATLAB session's IPGMovie (cm_movie_open); a standalone IPGMovie (movie=true) has no pictures."""
     out = S().movie_snapshot(time_s, camera, erg, width, height)
     with open(out["file"], "rb") as f:
         data = base64.b64encode(f.read()).decode("ascii")
@@ -926,7 +929,8 @@ def cm_standalone_close(instance: Instance = None) -> dict:
 # ---- parameter studies ---------------------------------------------------------------------
 @_tool(WRITE, "Start a parameter study")
 def cm_study_start(
-    testrun: Annotated[str, Field(description="Test run relative to Data/TestRun")],
+    testrun: Annotated[str | None, Field(description="Test run relative to Data/TestRun (with rerun: "
+                                                     "default its study's)")] = None,
     variations: Annotated[list[dict[str, Any]] | None, Field(
         description="One entry per run: {'label': 'heavy', 'keys': {'Body.mass': 320}, 'workspace': "
                     "{'Kp_yaw': 1.5}, 'driver': {'Driver.Acc.ayMax': 14, 'Driver.Acc.GGExp': "
@@ -966,6 +970,9 @@ def cm_study_start(
                     "table: all but its first column). At most 100 runs"), JsonText] = None,
     close_open: Annotated[bool, Field(description="standalone: first close the CarMaker programs this "
                                                   "server left open (each holds a licence)")] = False,
+    keys: Annotated[dict[str, Any] | None, Field(description="Keys for every run, e.g. {'Vehicle': "
+                                                         "'Car_B'}; a variation's own keys win"),
+                    JsonText] = None,
     rerun: Annotated[dict[str, Any] | None, Field(
         description="Runs of an earlier study again: {'study': id, 'labels': ['best']}, e.g. with movie and "
                     "keep_open to show the best run; an IPGMovie window kept open is "
@@ -978,7 +985,7 @@ def cm_study_start(
     (use 'driver'). Rows give valid and wall_s, the clock time of the run. A study stops at the first
     run that finds no CarMaker licence."""
     return ST().start(testrun, variations, quantities, mode, scope, max_run_s, save_logs, movie, speed,
-                      gates, keep_open, grid, close_open, rerun)
+                      gates, keep_open, grid, close_open, rerun, keys)
 
 
 @_tool(READ, "Parameter study progress and results")
