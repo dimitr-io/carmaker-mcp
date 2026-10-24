@@ -273,6 +273,11 @@ class StudyRunner:
             out["sectors"] = (f"each row's sectors are the times at markers {timed}, each measured from the "
                               "last reference marker before it (a lap on a skid pad); rank_by='sectors' "
                               "ranks by their mean")
+            if mode == "cm4sl":  # checked live: the session stores the project's output quantities only
+                out["sectors"] += (". The session's result files hold CarMaker's own trigger times only if "
+                                   "the output quantities include DM.TriggerPoint.Time and .Id "
+                                   "(cm_output_quantities_edit); otherwise they are timed on Vhcl.sRoad, a "
+                                   "few ms apart (gates_on per row)")
         used = {k for v in runs for k in v["keys"]}
         unknown = sorted(used - set(known_keys)) if known_keys is not None else []
         if unknown:

@@ -506,7 +506,7 @@ async def cm_driver_adaption(
     timeout_s: MaxWait = 45.0,
 ) -> dict:
     """Let IPGDriver learn the car (basic) or the car on this circuit (race), and save the knowledge.
-    It takes minutes (basic about 2 standalone, 5+ with MATLAB; race as long as the test run allows):
+    It takes minutes (basic about 2 standalone, 5 to 20 with MATLAB; race as long as the test run allows):
     run it only when the car changed noticeably, the race driver lacks knowledge, or the user asks, and
     tell the user the duration first. Start returns at once; then 'wait' until state is done/failed."""
     return await asyncio.to_thread(S().driver_adaption, action, kind, testrun, True, True, learning_rate,

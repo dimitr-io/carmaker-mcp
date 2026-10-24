@@ -10,8 +10,10 @@ into the test run when its driver is kept there ("Test Run").
 In the MATLAB session the session's own GUI does this. Without MATLAB the server starts a CarMaker GUI
 of its own (guiport.OwnGui), which works for cars without a Simulink controller.
 
-A Basic adaption takes minutes (the user's measure: about 2 standalone, 5 or more with Simulink; 30 s
-for a simple example car at maximum speed); a Race adaption runs as long as the test run allows.
+A Basic adaption takes minutes: measured 94 s standalone and 17 min in the MATLAB session for an FS car
+(the second with a Simulink controller), 30 s for a simple example car; a Race adaption runs as long as the
+test run allows. In the MATLAB session the GUI reported no phase (Driver.Adapt.Phase read 0 throughout):
+then only wall_s shows progress.
 """
 
 from __future__ import annotations
@@ -172,7 +174,7 @@ class Adaption:
                     phase = float(st.get("phase", ""))
                 except ValueError:
                     phase = None
-                if phase is not None:
+                if phase:  # 0: not readable (found in the MATLAB session), not a phase
                     self.state["phase"], self.state["phase_name"] = phase, phase_name(phase)
                 self.state["wall_s"] = round(time.time() - self._t0, 1)
                 active = st.get("active") == "1"

@@ -33,7 +33,7 @@ INSTRUCTIONS = (
     "Driver choice: the race driver only on closed circuits (Autocross, Endurance), adapted to both car "
     "and course; the standard driver for Acceleration and Skid Pad, with the limit in focus (axMax, or "
     "ayMax) set very high so the car, not the driver, is the limit. cm_driver_adaption runs a driver "
-    "adaption and saves the knowledge; it takes minutes (about 2 standalone, 5+ with MATLAB): run it only "
+    "adaption and saves the knowledge; it takes minutes (about 2 standalone, 5 to 20 with MATLAB): run it only "
     "when the car changed noticeably, the race driver lacks knowledge, or the user asks. To follow a speed "
     "exactly (input from file, validation) set dtAccBrake and dtMinAccelDecel to about 0.01 s. "
     "cm_guide('ipgdriver') has the lap-time procedure, corner cutting, adaption and every Driver.* key "
@@ -230,7 +230,8 @@ the car. Too small preview times overshoot, too large ones lag (5.6). A speed th
   maximum speed. Behind it is the GUI's script command `Driver adaptbasicknowledge` / `adaptracedriver`.
 * Needed for the race driver, optional but helpful for the standard driver. Run it again after changes
   with a real effect on the car (tyres, suspension, powertrain), not after small ones.
-* **It takes long:** Basic about 2 minutes standalone and 5 minutes or more in the MATLAB session; the Race
+* **It takes long:** Basic about 2 minutes standalone and 5 to 20 in the MATLAB session (measured: 17 min
+  for an FS car with a Simulink controller, with no phase shown, only `wall_s`); the Race
   Driver Adaption needs a run of at least 1000 s. Run it only when the car changed noticeably, when the
   race driver has no knowledge for this car and course, or when the user asks, and tell the user the
   expected duration first.

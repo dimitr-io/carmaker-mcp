@@ -93,8 +93,8 @@ outside what this server does or has been tried with.
 * CarMaker and MATLAB versions other than the ones named above; more than one MATLAB session or CarMaker GUI
   at a time.
 * Several standalone runs in parallel (each needs a CarMaker licence), pausing and resuming a standalone run.
-* Race driver adaption, and driver adaption in the MATLAB session: `cm_driver_adaption` uses an undocumented
-  command of the CarMaker GUI, and only the Basic adaption of a standalone run has been tried.
+* Race driver adaption: `cm_driver_adaption` uses an undocumented command of the CarMaker GUI, and only the
+  Basic adaption has been tried (standalone and in the MATLAB session).
 * Test runs with traffic, sensors or driver-assistance functions. Nothing stands in their way, but every check
   so far used vehicle-dynamics runs without them.
 
