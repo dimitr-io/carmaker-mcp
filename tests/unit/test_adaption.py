@@ -110,3 +110,53 @@ def test_in_the_matlab_session_it_holds_the_session_and_saves_with_a_backup(sess
     assert st["state"] == "done" and mock.adaption_saved and st["knowledge"]["Name"] == "Knowledge"
     assert [e["kind"] for e in session.changelog()][-1] == "driver_adaption"  # the test run, backed up
     session.load_testrun("Sub/Run1")  # the session is free again
+
+
+def test_standalone_adaptions_share_one_gui_and_free_the_licence_between(session, project, monkeypatch):
+    """Found in use: a GUI per adaption flickered, and closing it at the end raised CarMaker's error dialog."""
+    import time
+
+    from carmaker_mcp import guiport, standalone
+
+    started, guis = [], []
+
+    class Gui:
+        def __init__(self, cm_home, root):
+            self.fake, self.open = FakeGui(phases=(100, 600, 0)), True
+            self.gui = self
+            guis.append(self)
+
+        def tcl(self, command, timeout_ms=10000):
+            if command.startswith(("LoadTestRun", "Application", "SetSimTimeAcc", "expr")):
+                self.fake.calls.append(command)
+                return 0, ""
+            return self.fake.tcl(command, timeout_ms)
+
+        def start(self):
+            started.append(self)
+
+        def alive(self):
+            return self.open
+
+        def settle_and_stop(self):
+            self.tcl("Application stop")
+
+        def wait_quiet(self):
+            self.fake.calls.append("wait_quiet")
+
+        def close(self):
+            self.open = False
+
+    monkeypatch.setattr(guiport, "OwnGui", Gui)
+    monkeypatch.setattr(standalone, "find_cm_home", lambda explicit=None: project)
+    monkeypatch.setattr(time, "sleep", lambda s: None)
+    for _ in range(2):
+        session.driver_adaption("start", testrun="Sub/Run1", mode="standalone")
+        st = session.driver_adaption("wait", timeout_s=10)
+        assert st["state"] == "done"
+        guis[0].fake.phases = [100, 600, 0]
+        guis[0].fake.active = False
+    assert len(started) == 1 and guis[0].open  # one GUI for both
+    assert guis[0].fake.calls.count("Application stop") == 2  # the licence is free after each
+    assert guis[0].fake.calls.count("wait_quiet") == 2  # no adaption starts under the GUI's info box
+    assert session.driver_adaption("close") == {"closed": True} and not guis[0].open

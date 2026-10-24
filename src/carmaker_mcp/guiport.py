@@ -126,6 +126,36 @@ class OwnGui:
             time.sleep(1.0)
         raise BackendError(f"the CarMaker GUI did not answer within {timeout_s:g} s")
 
+    def alive(self) -> bool:
+        """The GUI still runs, answers and shows no dialog that blocks it (CarMaker's internal error
+        dialog .bgerror leaves a modal error box behind, and the next start hangs: found in use)."""
+        if self.proc is None or self.proc.poll() is not None or self.gui.tcl("expr 1", 2000)[0] != 0:
+            return False
+        # a grab of the main window "." is normal after an adaption; one of a dialog is not
+        return self.gui.tcl("expr {[winfo exists .bgerror] || [grab current] ni {{} .}}", 3000) == (0, "0")
+
+    def wait_quiet(self, quiet_s: float = 1.0, max_s: float = 30.0) -> None:
+        """Wait until the GUI shows no message box. Found in use: a race adaption started while the info
+        box that follows a program start was still open raised CarMaker's internal error dialog at its
+        end (can't set "HIL(SimState)": bad window path name ".msgbox"), and the next start hung."""
+        self.settle(0.0, quiet_s, max_s)
+
+    def settle_and_stop(self) -> None:
+        """Stop the simulation program once the GUI has finished an adaption (frees the licence)."""
+        self.settle(2.0, 1.0, 30.0)
+        self.gui.tcl("Application stop", 60000)
+
+    def settle(self, min_s: float, quiet_s: float, max_s: float) -> None:
+        """At least ``min_s``, and no message box for ``quiet_s`` (at most ``max_s``)."""
+        t0, quiet_since = time.time(), None
+        while time.time() - t0 < max_s:
+            busy = self.gui.tcl("winfo exists .msgbox", 3000) != (0, "0")
+            now = time.time()
+            quiet_since = None if busy else (quiet_since or now)
+            if quiet_since and now - quiet_since >= quiet_s and now - t0 >= min_s:
+                break
+            time.sleep(0.25)
+
     def close(self) -> None:
         """Stop its simulation program and end the GUI (nothing of the user's is in it)."""
         if self.proc is None:

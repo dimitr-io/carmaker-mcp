@@ -228,6 +228,12 @@ the car. Too small preview times overshoot, too large ones lag (5.6). A speed th
   MATLAB session the session's GUI runs it; without MATLAB the server starts a CarMaker GUI of its own
   (cars without a Simulink controller only). Measured: an FS car's Basic adaption took 94 s standalone at
   maximum speed. Behind it is the GUI's script command `Driver adaptbasicknowledge` / `adaptracedriver`.
+* A race adaption is one run of the test run: it learns over the laps that run drives. Give it at least
+  1000 s (IPG's advice), e.g. an end condition of 20 to 30 laps on a copy of the test run, and time the
+  result on the usual two laps. Found live: on a two-lap test run it changed the knowledge only slightly,
+  and the learning rate (0.25 to 1) made no difference; the saved knowledge kept LearningRate 0.75.
+* Standalone, the server keeps one CarMaker GUI open for all adaptions (its simulation program is
+  stopped in between, so the licence is free for standalone runs); `action="close"` ends it.
 * Needed for the race driver, optional but helpful for the standard driver. Run it again after changes
   with a real effect on the car (tyres, suspension, powertrain), not after small ones.
 * **It takes long:** Basic about 2 minutes standalone and 5 to 20 in the MATLAB session (measured: 17 min

@@ -21,6 +21,12 @@ parameters may still change between minor versions.
 - `cm_study_start(rerun={"study": id, "labels": [...]})` runs rows of an earlier study again, for example
   the best one with `movie=true, keep_open=true`. A movie study reuses the program and IPGMovie window an
   earlier study kept open instead of closing it.
+- Standalone driver adaptions share one CarMaker GUI of the server's own, instead of one opened and closed
+  per adaption; between adaptions only its simulation program is stopped, so the CarMaker licence is free
+  for standalone runs. `cm_driver_adaption(action="close")` ends it (it also ends with the server). An
+  adaption now waits until the GUI's info box after a program start has closed: a race adaption started
+  under it raised CarMaker's internal error dialog at its end ("bad window path name .msgbox") and left
+  the GUI blocked. A GUI showing that dialog is replaced by a new one.
 - A driver adaption ends what the server's own CarMaker GUI started: a race adaption opened IPGMovie by
   itself, which stayed open after the GUI closed. A race adaption's answer names the `learning_rate` used
   (the knowledge's own LearningRate field is not changed by it).

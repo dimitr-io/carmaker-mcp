@@ -83,6 +83,7 @@ class Session:
         self.study_owner: int | None = None
         self.busy_with: str | None = None  # what holds the session besides a study (a driver adaption)
         self._adaption: Any = None  # the driver adaption of this session (adaption.Adaption)
+        self._own_gui: Any = None  # the CarMaker GUI this server started for adaptions (guiport.OwnGui)
         b: Any = backend
         if getattr(b, "diag_file", "") is None:  # a backend that can log Simulink's diagnostics
             b.diag_file = self.cfg.state_dir / "simulink-diagnostics.txt"
@@ -846,6 +847,14 @@ class Session:
         from . import adaption, guiport
 
         a = self._adaption
+        if action == "close":
+            if a is not None and a.running:
+                raise BackendError("a driver adaption is running (action 'wait' or 'cancel')")
+            if self._own_gui is None:
+                return {"closed": False, "note": "this server has no CarMaker GUI of its own open"}
+            self._own_gui.close()
+            self._own_gui = None
+            return {"closed": True}
         if action in ("status", "wait", "cancel"):
             if a is None:
                 raise BackendError("no driver adaption has been started in this session")
@@ -853,7 +862,7 @@ class Session:
                 return a.cancel()
             return a.wait(timeout_s if action == "wait" else 0)
         if action != "start":
-            raise BackendError("action is start, wait, status or cancel")
+            raise BackendError("action is start, wait, status, cancel or close")
         if a is not None and a.running:
             raise BackendError("a driver adaption is already running (action 'wait' or 'cancel')")
         if mode == "auto":
@@ -898,18 +907,34 @@ class Session:
                                    "controller)")
             from .standalone import find_cm_home
 
-            gui = guiport.OwnGui(find_cm_home(self.cfg.cm_home), project.root)
-            gui.start()
+            # One GUI for every adaption of this server (found in use: a GUI opened and closed per
+            # adaption flickered on the user's screen, and closing it right at the end of a race
+            # adaption raised CarMaker's internal error dialog). Between adaptions only its simulation
+            # program is stopped, which frees the CarMaker licence for standalone runs.
+            gui = self._own_gui
+            if gui is None or not gui.alive():
+                if gui is not None:
+                    gui.close()
+                gui = guiport.OwnGui(find_cm_home(self.cfg.cm_home), project.root)
+                gui.start()
+                self._own_gui = gui
+                import atexit
+
+                atexit.register(gui.close)
             tcl = gui.gui.tcl
-            release = gui.close
+
+            def release() -> None:  # frees the licence; the GUI stays for the next adaption
+                gui.settle_and_stop()
+
             try:
                 for cmd, ms in ((f"LoadTestRun {{{testrun}}}", 60000), ("Application start", 180000),
                                 ("SetSimTimeAcc 999999", 5000)):
                     status, res = tcl(cmd, ms)
                     if status != 0:
                         raise BackendError(f"`{cmd}` failed: {res}")
+                gui.wait_quiet()
             except BaseException:
-                gui.close()
+                tcl("Application stop", 60000)
                 raise
         a = adaption.Adaption(tcl, helpers, kind, vehicle_limits, controller_dynamics, learning_rate,
                               knowledge, save, max_run_s, before_save=backup, after=release)

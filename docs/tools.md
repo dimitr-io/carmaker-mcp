@@ -376,7 +376,7 @@ Let IPGDriver learn the car (basic) or the car on this circuit (race), and save 
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
-| `action` | `start` \| `wait` \| `status` \| `cancel` | required | wait: until it ends or timeout_s |
+| `action` | `start` \| `wait` \| `status` \| `cancel` \| `close` | required | wait: until it ends or timeout_s. close: end the CarMaker GUI the server opened for standalone adaptions (it stays open for the next one; it ends with the server) |
 | `kind` | `basic` \| `race` | `"basic"` | basic: learn the car (needed first); race: laps of a closed circuit |
 | `testrun` | string or null | null | Load this test run first (needed standalone) |
 | `learning_rate` | number | `0.5` | race: 0 sensitive .. 1 aggressive |

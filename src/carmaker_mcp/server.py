@@ -491,8 +491,10 @@ def cm_results_plot(
 
 @_tool(DESTRUCTIVE, "Driver adaption")
 async def cm_driver_adaption(
-    action: Annotated[Literal["start", "wait", "status", "cancel"], Field(description="wait: until it ends "
-                                                                                      "or timeout_s")],
+    action: Annotated[Literal["start", "wait", "status", "cancel", "close"],
+                      Field(description="wait: until it ends or timeout_s. close: end the CarMaker GUI "
+                                        "the server opened for standalone adaptions (it stays open for "
+                                        "the next one; it ends with the server)")],
     kind: Annotated[Literal["basic", "race"], Field(description="basic: learn the car (needed first); "
                                                                 "race: laps of a closed circuit")] = "basic",
     testrun: Annotated[str | None, Field(description="Load this test run first (needed standalone)")] = None,
