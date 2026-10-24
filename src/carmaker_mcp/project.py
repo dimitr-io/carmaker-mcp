@@ -100,7 +100,7 @@ class Project:
 
     def read(
         self, kind: str, name: str, keys: list[str] | None = None, prefix: str | None = None,
-        max_items: int = 300,
+        max_items: int = 300, search: str | None = None, offset: int = 0,
     ) -> dict:
         p, info = self._load(kind, name)
         if not info.is_infofile:
@@ -110,16 +110,40 @@ class Project:
             d = {k: d[k] for k in keys if k in d}
         if prefix:
             d = {k: v for k, v in d.items() if k.startswith(prefix)}
+        if search:  # a part of the key name, any case (asked for in use: a prefix read flooded the context)
+            d = {k: v for k, v in d.items() if search.lower() in k.lower()}
         total = len(d)
-        items = dict(list(d.items())[:max_items])
+        items = dict(list(d.items())[offset:offset + max_items])
         out: dict = {"kind": kind, "name": name, "infofile": True}
         if kind == "testrun":  # first: the values below may be overruled by its driver template
             out["driver"] = self.driver(info.to_dict())
+            out.update(self.standalone_check(info.to_dict()))
         out.update({"total_keys": total, "returned": len(items), "values": items})
-        if total > len(items):
-            out["note"] = f"showing {len(items)} of {total} keys: filter with keys or prefix"
-        elif total == 0 and (keys or prefix):
+        if offset + len(items) < total:
+            out["next_offset"] = offset + len(items)
+            out["note"] = (f"keys {offset + 1} to {offset + len(items)} of {total}: read on with "
+                           f"offset={offset + len(items)}, or filter with keys, prefix or search")
+        elif total == 0 and (keys or prefix or search):
             out["note"] = f"no key matches the filter; the file has {len(info.to_dict())} keys"
+        return out
+
+    def standalone_check(self, testrun: dict[str, str], overrides: dict[str, Any] | None = None) -> dict:
+        """Whether the test run's vehicle can run without MATLAB: parts whose kind is CM4SL are Simulink
+        models (e.g. PowerTrain.Control.Kind = CM4SL 1), which only CarMaker for Simulink has."""
+        run = {**testrun, **{k: str(v) for k, v in (overrides or {}).items()}}
+        vehicle = run.get("Vehicle")
+        values = dict(run)
+        if vehicle:
+            try:
+                p = self.path("vehicle", vehicle)
+                if p.is_file():
+                    values = {**InfoFile.load(p).to_dict(), **run}
+            except (OSError, ProjectError, GuardError):
+                pass
+        parts = {k: v for k, v in values.items() if k.endswith(".Kind") and v.split()[:1] == ["CM4SL"]}
+        out: dict[str, Any] = {"standalone": not parts}
+        if parts:
+            out["simulink_parts"] = parts
         return out
 
     def diff(self, kind: str, a: str, b: str, prefix: str | None = None, max_items: int = 300) -> dict:
@@ -153,22 +177,9 @@ class Project:
             "knowledge_vehicle": testrun.get("Driver.Knowl.0.Vehicle"),
             "knowledge_testrun": testrun.get("Driver.Knowl.0.VehicleLimits.Testrun"),
         }
-        source = testrun
-        if template and template != "TestRun":
-            out["defined_in"] = None
-            for name in ("Template/" + template, template):
-                try:
-                    p = self.path("driver", name)
-                except (ProjectError, GuardError):
-                    continue
-                if p.is_file():
-                    source, out["defined_in"] = InfoFile.load(p).to_dict(), f"driver {name}"
-                    break
-            if out["defined_in"] is None:
-                out["note"] = f"no driver template {template!r} in Data/Driver/Template"
-                source = {}
-        else:
-            out["defined_in"] = "this test run"
+        source, out["defined_in"] = self._driver_source(testrun)
+        if out["defined_in"] is None:
+            out["note"] = f"no driver template {template!r} in Data/Driver/Template"
         out["values"] = {k: source[k] for k in DRIVER_KEYS if k in source}
         if source is not testrun:
             # Observed: with a template named, these keys of the test run itself changed nothing.
@@ -176,6 +187,25 @@ class Project:
             if own:
                 out["unused_testrun_values"] = own
         return {k: v for k, v in out.items() if v is not None or k == "defined_in"}
+
+    def _driver_source(self, testrun: dict[str, str]) -> tuple[dict[str, str], str | None]:
+        """Every key of the driver the test run uses, and where they are: its template, or the test run
+        itself. ({}, None) when the template it names does not exist."""
+        template = testrun.get(DRIVER_TEMPLATE) or None
+        if not template or template == "TestRun":
+            return testrun, "this test run"
+        for name in ("Template/" + template, template):
+            try:
+                p = self.path("driver", name)
+            except (ProjectError, GuardError):
+                continue
+            if p.is_file():
+                return InfoFile.load(p).to_dict(), f"driver {name}"
+        return {}, None
+
+    def driver_values(self, testrun: str) -> dict[str, str]:
+        """The driver keys the test run's runs use (for scaling them in a study grid)."""
+        return self._driver_source(self._load("testrun", testrun)[1].to_dict())[0]
 
     # ---- editing -----------------------------------------------------------
     def edit(self, kind: str, name: str, overrides: dict[str, str | None]) -> dict:

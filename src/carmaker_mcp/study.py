@@ -58,32 +58,52 @@ _STATS = ("min", "max", "mean", "last")
 MAX_RUNS = 100
 
 
-def grid_variations(grid: dict[str, dict[str, list]]) -> list[dict]:
-    """Every combination of the listed values: {'keys': {k: [...]}, 'driver': {...}, 'workspace': {...}}.
+def scale_value(text: str, factor: float) -> str:
+    """A driver value times a factor: a number, or every column but the first of a table (rows such as
+    'vel_kmh exp_acc exp_dec' of Driver.Acc.GGExp, whose speeds stay)."""
+    rows = [r.split() for r in str(text).strip().splitlines() if r.strip()]
+    try:
+        if len(rows) == 1 and len(rows[0]) == 1:
+            return f"{float(rows[0][0]) * factor:.6g}"
+        return "\n".join(" ".join([r[0], *(f"{float(x) * factor:.6g}" for x in r[1:])]) for r in rows)
+    except (ValueError, IndexError) as e:
+        raise BackendError(f"cannot scale {text!r}: not numbers") from e
+
+
+def grid_variations(grid: dict[str, dict[str, list]],
+                    driver_base: dict[str, str] | None = None) -> list[dict]:
+    """Every combination of the listed values: {'keys': {k: [...]}, 'driver': {...}, 'workspace': {...},
+    'driver_scale': {k: [factors]}}; 'driver_scale' multiplies the driver's own value (``driver_base``).
     Labels name the values; a long value (a table) is named by its position, #1, #2..."""
     import itertools
 
-    if set(grid) - {"keys", "driver", "workspace"}:
-        raise BackendError("grid takes 'keys', 'driver' and 'workspace'")
-    axes = []  # (group, name, values), in the order given: the labels follow it
+    if set(grid) - {"keys", "driver", "workspace", "driver_scale"}:
+        raise BackendError("grid takes 'keys', 'driver', 'workspace' and 'driver_scale'")
+    axes = []  # (group, name, values, labels), in the order given: the labels follow it
     for group, entries in grid.items():
         for name, values in (entries or {}).items():
             if not isinstance(values, list) or not values:
                 raise BackendError(f"grid {group} {name!r}: give a non-empty list of values")
-            axes.append((group, name, values))
+            short = name.split(".")[-1]
+            if group == "driver_scale":
+                base = (driver_base or {}).get(name)
+                if base is None:
+                    raise BackendError(f"grid driver_scale {name!r}: the test run's driver has no such value "
+                                       "to scale; give the values in 'driver' instead")
+                axes.append(("driver", name, [scale_value(base, float(f)) for f in values],
+                             [f"{short}×{float(f):g}" for f in values]))
+                continue
+            labels = [f"{short}={v}" if len(str(v)) <= 12 and "\n" not in str(v) else f"{short}#{i + 1}"
+                      for i, v in enumerate(values)]
+            axes.append((group, name, values, labels))
     if not axes:
         return []
     out = []
-    for combo in itertools.product(*[range(len(v)) for _, _, v in axes]):
+    for combo in itertools.product(*[range(len(a[2])) for a in axes]):
         var: dict[str, Any] = {"keys": {}, "driver": {}, "workspace": {}}
-        label = []
-        for (group, name, values), i in zip(axes, combo, strict=True):
-            value = values[i]
-            var[group][name] = value
-            text = str(value)
-            short = name.split(".")[-1]
-            label.append(f"{short}={text}" if len(text) <= 12 and "\n" not in text else f"{short}#{i + 1}")
-        var["label"] = " ".join(label)
+        for (group, name, values, _), i in zip(axes, combo, strict=True):
+            var[group][name] = values[i]
+        var["label"] = " ".join(a[3][i] for a, i in zip(axes, combo, strict=True))
         out.append({k: v for k, v in var.items() if v})
     return out
 
@@ -165,7 +185,7 @@ class StudyRunner:
               mode: str = "auto", scope: str = "base", max_run_s: float = 900.0,
               save_logs: bool = False, movie: bool = False, speed: float | None = None,
               gates: list[float] | str | None = None, keep_open: bool = False,
-              grid: dict | None = None, close_open: bool = False) -> dict:
+              grid: dict | None = None, close_open: bool = False, rerun: dict | None = None) -> dict:
         if mode == "auto":  # found in use: cm4sl as the default failed where only standalone was ready
             try:
                 mode = "cm4sl" if self.session.backend.status().connected else "standalone"
@@ -178,12 +198,16 @@ class StudyRunner:
                                "cm_movie_open before the study")
         if save_logs and mode != "cm4sl":
             raise BackendError("save_logs needs the MATLAB-connected session (mode 'cm4sl')")
-        variations = list(variations or []) + grid_variations(grid or {})
+        base = self.session.project.driver_values(testrun) if (grid or {}).get("driver_scale") else None
+        variations = list(variations or []) + grid_variations(grid or {}, base) + self._rerun(rerun)
         if not variations:
-            raise BackendError("give variations, a grid, or both")
+            raise BackendError("give variations, a grid or rerun")
         if len(variations) > MAX_RUNS:
             raise BackendError(f"{len(variations)} runs: at most {MAX_RUNS} per study")
         runs = check_variations(variations, mode)
+        if mode == "standalone":  # once per vehicle the runs use
+            for keys in {v["keys"].get("Vehicle"): v["keys"] for v in runs}.values():
+                self.session.require_standalone(testrun, keys)
         markers = None
         if gates == "markers":  # the test run's trigger points, as the CarMaker instrument times them
             markers = timing.trigger_markers(self.session.project.read("testrun", testrun,
@@ -209,7 +233,8 @@ class StudyRunner:
         names = sorted({n for v in runs for n in v["workspace"]})
         ws: dict[str, Any] = (self.session.workspace_check(names, scope) if names
                               else {"new": [], "overruled": []})
-        open_note = self._open_instances(mode, close_open)
+        reuse = self._kept_instance() if movie and mode == "standalone" else None
+        open_note = self._open_instances(mode, close_open, keep=reuse)
         with self._lock:
             active = [s["id"] for s in self._studies.values() if s["state"] == "running"]
             if active:
@@ -227,6 +252,11 @@ class StudyRunner:
                 "started": time.strftime("%Y-%m-%d %H:%M:%S"), "total": len(runs), "current": 0,
                 "current_label": None, "rows": [], "variations": runs,
             }
+            if reuse:  # the IPGMovie window of the last study shows this one too (asked for in use)
+                st["_instance"] = reuse
+                for old in self._studies.values():
+                    if old.get("kept_open") == reuse:
+                        old.pop("kept_open")
             self._studies[sid] = st
             self._cancel[sid] = threading.Event()
             self._progress[sid] = threading.Condition()
@@ -238,6 +268,11 @@ class StudyRunner:
                                "note": "cm_study_wait blocks until the next run has finished; "
                                        "cm_study_status shows the table"}
         out.update(open_note)
+        if markers:
+            timed = [m["id"] for m in markers if m["mode"] in (2, 3)]
+            out["sectors"] = (f"each row's sectors are the times at markers {timed}, each measured from the "
+                              "last reference marker before it (a lap on a skid pad); rank_by='sectors' "
+                              "ranks by their mean")
         used = {k for v in runs for k in v["keys"]}
         unknown = sorted(used - set(known_keys)) if known_keys is not None else []
         if unknown:
@@ -257,35 +292,60 @@ class StudyRunner:
                             "changes nothing")
         return out
 
-    def status(self, study: str | None = None, detail: str = "compact", rank_by: str | None = None) -> dict:
+    def status(self, study: str | None = None, detail: str = "compact", rank_by: str | None = None,
+               labels: list[str] | None = None, top: int | None = None,
+               with_studies: list[str] | None = None) -> dict:
         """``brief``: one line per run (label, valid, status, sector times, short abort reason).
         ``compact``: also the statistics per quantity and the result file. ``full``: everything,
-        including every run's keys and workspace values. ``rank_by`` adds a ranking (see ``metric``)."""
+        including every run's keys and workspace values. ``labels`` keeps only those rows. ``rank_by``
+        adds a ranking (see ``metric``) with each run's result file, the ``top`` ones, over this study
+        and ``with_studies``."""
         if detail not in ("brief", "compact", "full"):
             raise BackendError("detail must be 'brief', 'compact' or 'full'")
         st = self._get(study)
+        rows = [r for r in st["rows"] if not labels or r["label"] in labels]
         if detail == "full":
             out = {k: v for k, v in st.items() if k != "variations" and not k.startswith("_")}
-            out["done"] = len(st["rows"])
+            out["rows"] = rows
         else:
             out = {k: st[k] for k in ("id", "state", "testrun", "total", "current_label", "started",
                                       "finished", "cancelled", "error", "kept_open") if st.get(k) is not None}
-            out["done"] = len(st["rows"])
-            out["rows"] = [_brief(r) if detail == "brief" else _compact(r) for r in st["rows"]]
+            out["rows"] = [_brief(r) if detail == "brief" else _compact(r) for r in rows]
+        out["done"] = len(st["rows"])
+        if labels:
+            missing = [lb for lb in labels if lb not in {r["label"] for r in st["rows"]}]
+            if missing:
+                out["labels_not_found"] = missing
         if rank_by:
-            out.update(self._ranking(st["rows"], rank_by))
+            pool = [(st["id"], r) for r in st["rows"]]
+            for other in with_studies or []:
+                if other != st["id"]:
+                    pool += [(other, r) for r in self._get(other)["rows"]]
+            out.update(self._ranking(pool, rank_by, top, several=len({s for s, _ in pool}) > 1))
         return out
 
     @staticmethod
-    def _ranking(rows: list[dict], rank_by: str) -> dict:
+    def _ranking(pool: list[tuple[str, dict]], rank_by: str, top: int | None = None,
+                 several: bool = False) -> dict:
         desc = rank_by.startswith("-")
         key = rank_by.lstrip("-")
-        ranked = sorted([(v, r["label"]) for r in rows
-                         if r.get("valid") and (v := metric(r, key)) is not None], reverse=desc)
-        return {"ranking": [{"label": label, key: round(v, 4)} for v, label in ranked],
-                "ranking_by": f"{key} ({'largest' if desc else 'smallest'} first; valid runs only)",
-                "not_ranked": [r["label"] for r in rows
-                               if not r.get("valid") or metric(r, key) is None]}
+        ranked = sorted([(v, sid, r) for sid, r in pool
+                         if r.get("valid") and (v := metric(r, key)) is not None],
+                        key=lambda x: x[0], reverse=desc)
+        entries = []
+        for v, sid, r in ranked[:top]:
+            e: dict[str, Any] = {"label": r["label"], key: round(v, 4)}
+            if several:
+                e["study"] = sid
+            if r.get("result_file"):
+                e["result_file"] = r["result_file"]
+            entries.append(e)
+        out = {"ranking": entries,
+               "ranking_by": f"{key} ({'largest' if desc else 'smallest'} first; valid runs only)",
+               "not_ranked": [r["label"] for _, r in pool if not r.get("valid") or metric(r, key) is None]}
+        if top and len(ranked) > top:
+            out["ranked"] = len(ranked)
+        return out
 
     def wait_progress(self, study: str | None = None, timeout_s: float = 45.0,
                       until_done: bool = False, detail: str = "brief") -> dict:
@@ -339,13 +399,37 @@ class StudyRunner:
         except Exception:
             return None
 
-    def _open_instances(self, mode: str, close: bool) -> dict:
+    def _rerun(self, rerun: dict | None) -> list[dict]:
+        """Variations of an earlier study, by label: {'study': id (default: the latest), 'labels': [...]}."""
+        if not rerun:
+            return []
+        if set(rerun) - {"study", "labels"} or not rerun.get("labels"):
+            raise BackendError("rerun takes {'study': <id>, 'labels': [<label>, ...]}")
+        old = self._get(rerun.get("study"))
+        by_label = {v["label"]: v for v in old["variations"]}
+        missing = [lb for lb in rerun["labels"] if lb not in by_label]
+        if missing:
+            raise BackendError(f"study {old['id']} has no runs labelled {missing}")
+        return [{k: v for k, v in by_label[lb].items() if v} for lb in rerun["labels"]]
+
+    def _kept_instance(self) -> str | None:
+        """The program, with its IPGMovie window, that an earlier study left open, if it still is."""
+        sa = self._standalone()
+        open_ids = {i["instance"] for i in (sa.own_instances() if hasattr(sa, "own_instances") else [])}
+        for old in reversed(list(self._studies.values())):
+            if old.get("kept_open") in open_ids:
+                return old["kept_open"]
+        return None
+
+    def _open_instances(self, mode: str, close: bool, keep: str | None = None) -> dict:
         """Standalone programs this server left open (keep_open, start=false) each hold a licence: close
-        them on request, else name them (found in use: a study then failed run after run)."""
+        them on request, else name them (found in use: a study then failed run after run). ``keep`` is
+        the one the new study goes on with."""
         if mode != "standalone":
             return {}
         sa = self._standalone()
-        own = sa.own_instances() if hasattr(sa, "own_instances") else []
+        own = [i for i in (sa.own_instances() if hasattr(sa, "own_instances") else [])
+               if i["instance"] != keep]
         if not own:
             return {}
         if close:

@@ -20,7 +20,7 @@ from typing import Annotated, Any, Literal
 from fastmcp import Context, FastMCP
 from fastmcp.exceptions import ToolError
 from mcp.types import ImageContent, TextContent, ToolAnnotations
-from pydantic import AfterValidator, Field
+from pydantic import AfterValidator, BeforeValidator, Field
 
 from . import __version__, guide
 from .backend import BackendError
@@ -212,7 +212,21 @@ Scope = Annotated[str, Field(description="'base' for the MATLAB base workspace, 
 Instance = Annotated[str | None, Field(description="Standalone instance id such as 'sa1' (may be "
                                                    "omitted while there is only one)")]
 ErgPath = Annotated[str, Field(description="Result file (.erg): absolute path, or relative to the project")]
-Quantities = Annotated[list[str], Field(description="CarMaker quantity names, e.g. ['Time', 'Car.v']")]
+def _from_json_text(v: Any) -> Any:
+    """A list or object some clients send as JSON text (found in use: gates=[...] arrived as a string)."""
+    if isinstance(v, str) and v.strip()[:1] in ("[", "{"):
+        try:
+            return json.loads(v)
+        except ValueError:
+            return v
+    return v
+
+
+JsonText = BeforeValidator(_from_json_text)
+
+
+Quantities = Annotated[list[str], JsonText,
+                       Field(description="CarMaker quantity names, e.g. ['Time', 'Car.v']")]
 MAX_WAIT_S = 50.0  # some clients end a tool call after 60 s (found in use: a remote device bridge)
 MaxWait = Annotated[float, Field(description="Longest time to wait in s, at most 50 (larger values are cut "
                                              "to 50); call again if not finished", gt=0),
@@ -228,7 +242,8 @@ RankBy = Annotated[str | None, Field(description="Rank the valid runs: 'sectors'
                                                  "'splits' (their sum), 'sim_time', or a quantity statistic "
                                                  "such as 'Car.v.max'; '-' first for largest first")]
 Overrides = Annotated[dict[str, Any] | None, Field(description="Test-run keys to change in memory only, "
-                                                               "e.g. {'Vehicle.DriverTemplate.FName': 'X'}")]
+                                                               "e.g. {'Vehicle.DriverTemplate.FName': "
+                                                               "'X'}"), JsonText]
 
 
 # ---- setup ---------------------------------------------------------------------------
@@ -406,7 +421,7 @@ def cm_results_list(
 def cm_results_summary(
     erg: ErgPath,
     quantities: Annotated[list[str] | None, Field(description="Quantities to summarise (default: Time, "
-                                                              "Car.v)")] = None,
+                                                              "Car.v)"), JsonText] = None,
     search: Annotated[str | None, Field(description="Instead of a summary, list the quantity names that "
                                                     "contain this text ('PT.') or match this wildcard "
                                                     "pattern ('Car.v*'; '*' lists all)")] = None,
@@ -438,7 +453,7 @@ def cm_results_read(
 @_tool(WRITE, "Export a result file")
 def cm_results_export(
     erg: ErgPath,
-    quantities: Annotated[list[str] | None, Field(description="Default: all")] = None,
+    quantities: Annotated[list[str] | None, Field(description="Default: all"), JsonText] = None,
     t_min: Annotated[float | None, Field(description="Start of the time window in s")] = None,
     t_max: Annotated[float | None, Field(description="End of the time window in s")] = None,
     file: Annotated[str | None, Field(description="Target .mat or .csv (absolute, or relative to the "
@@ -454,9 +469,10 @@ def cm_results_export(
 @_tool(WRITE, "Plot result files in IPGControl")
 def cm_results_plot(
     ergs: Annotated[list[str], Field(description="Result files (.erg), absolute or relative to the project; "
-                                                 "several are overlaid", min_length=1, max_length=8)],
+                                                 "several are overlaid", min_length=1, max_length=8),
+                    JsonText],
     quantities: Annotated[list[str], Field(description="Quantities to plot, e.g. ['Car.ay', 'Car.YawRate']",
-                                           min_length=1, max_length=12)],
+                                           min_length=1, max_length=12), JsonText],
     x: Annotated[str | None, Field(description="Quantity for the x axis (default: Time), e.g. "
                                                "'Car.Distance'")] = None,
     picture: Annotated[bool, Field(description="Also return a picture of the plot")] = True,
@@ -514,7 +530,7 @@ def cm_results_crossings(
     erg: ErgPath,
     quantity: Annotated[str, Field(description="e.g. 'Car.Distance' for gates along the course")],
     values: Annotated[list[float], Field(description="Values to find, e.g. gate distances in m",
-                                         min_length=1, max_length=100)],
+                                         min_length=1, max_length=100), JsonText],
     direction: Annotated[Literal["any", "rising", "falling"], Field(description="Which crossings")] = "any",
 ) -> dict:
     """Interpolated times at which a quantity crosses each value, and the time between the first
@@ -536,9 +552,10 @@ def cm_output_quantities() -> dict:
 @_tool(DESTRUCTIVE, "Change the output quantities")
 def cm_output_quantities_edit(
     add: Annotated[list[str] | None, Field(description="Quantities to store as well, e.g. ['Car.az', "
-                                                       "'PT.Motor*.Trq']; wildcards * and ? allowed")] = None,
+                                                       "'PT.Motor*.Trq']; wildcards * and ? "
+                                                       "allowed"), JsonText] = None,
     remove: Annotated[list[str] | None, Field(description="Entries to take out, spelled as they are "
-                                                          "listed")] = None,
+                                                          "listed"), JsonText] = None,
     rate: Annotated[Literal["fast", "normal", "slow"],
                     Field(description="Storage rate for added quantities (sample times: "
                                       "cm_output_quantities)")] = "normal",
@@ -608,13 +625,17 @@ def cm_list(
 def cm_read(
     kind: Kind,
     name: Annotated[str, Field(description="File name relative to the kind's folder, as cm_list returns it")],
-    keys: Annotated[list[str] | None, Field(description="Only these keys")] = None,
+    keys: Annotated[list[str] | None, Field(description="Only these keys"), JsonText] = None,
     prefix: Annotated[str | None, Field(description="Only keys starting with this, e.g. 'Vehicle' or "
                                                     "'DrivMan.'")] = None,
+    search: Annotated[str | None, Field(description="Only keys containing this, any case, e.g. "
+                                                    "'Control.Kind'")] = None,
+    offset: Annotated[int, Field(description="Skip this many keys (paging: next_offset)", ge=0)] = 0,
 ) -> dict:
-    """Key / value pairs of a CarMaker infofile. Large files are truncated: filter by keys or prefix.
-    For a test run `driver` comes first: its driver template (or 'TestRun'), knowledge and main limits."""
-    return S().project.read(kind, name, keys, prefix)
+    """Key / value pairs of a CarMaker infofile, 300 at a time: filter by keys, prefix or search, or page
+    with offset. For a test run first `driver` (its template or 'TestRun', knowledge, main limits) and
+    `standalone`: false names the vehicle's Simulink parts (runs need the MATLAB session)."""
+    return S().project.read(kind, name, keys, prefix, search=search, offset=offset)
 
 
 @_tool(READ, "Compare two project data files")
@@ -634,7 +655,8 @@ def cm_edit(
     kind: Kind,
     name: Annotated[str, Field(description="File name relative to the kind's folder")],
     overrides: Annotated[dict[str, Any], Field(description="Keys to set, e.g. {'Road.FName': "
-                                                           "'SKIDPAD.rd5'}; a null value removes the key")],
+                                                           "'SKIDPAD.rd5'}; a null value removes the "
+                                                           "key"), JsonText],
 ) -> dict:
     """Change keys in a project file in place (backed up first, logged; only the edited lines change).
     Requires an idle simulation; load the test run again afterwards. Driver parameters belong in the
@@ -756,7 +778,7 @@ def cm_model_logs_save(
 def cm_model_add_block(
     src: Annotated[str, Field(description="Library block, e.g. 'simulink/Math Operations/Gain'")],
     dest: Annotated[str, Field(description="New block path, e.g. 'MyModel/Sub/Gain1'")],
-    params: Annotated[dict[str, Any] | None, Field(description="Block parameters to set")] = None,
+    params: Annotated[dict[str, Any] | None, Field(description="Block parameters to set"), JsonText] = None,
 ) -> dict:
     """EXPERIMENTAL. add_block. Unsaved until cm_model_save; a revert reloads the model from disk."""
     return S().model_struct("add_block", src=src, dest=dest, params=params or {})
@@ -792,7 +814,7 @@ def cm_standalone_launch(
     overrides: Overrides = None,
     quantities: Annotated[list[str] | None, Field(description="Quantities to store (default: Time, Car.v, "
                                                               "Car.YawRate, Car.ax, Car.ay, "
-                                                              "Car.Distance)")] = None,
+                                                              "Car.Distance)"), JsonText] = None,
     stop_after_s: Annotated[float | None, Field(description="Safety stop at this simulation time in s "
                                                             "(null: none)")] = 600.0,
     executable: Annotated[str | None, Field(description="CarMaker executable (default: the stock one of "
@@ -803,11 +825,12 @@ def cm_standalone_launch(
     speed: Speed = None,
     driver: Annotated[dict[str, Any] | None,
                       Field(description="Driver template values for this program only, in a copy removed "
-                                        "when it closes")] = None,
+                                        "when it closes"), JsonText] = None,
 ) -> dict:
     """Start a NEW independent CarMaker simulation program (not connected to MATLAB) and run a test run
     on it. Only for test runs whose vehicle does not need a Simulink controller. Results go to the
     project's SimOutput; see cm_standalone_results. start=false only opens CarMaker (and IPGMovie)."""
+    S().require_standalone(testrun, overrides)
     overrides, temp = S().standalone_driver(testrun, dict(overrides or {}), driver)
     try:
         return SA().launch(testrun, overrides=overrides or None, quantities=quantities,
@@ -824,7 +847,7 @@ def cm_standalone_attach(
     pid: Annotated[int, Field(description="Process id from cm_standalone_servers")],
     testrun: Annotated[str | None, Field(description="Test run to configure (needed to start a run)")] = None,
     overrides: Overrides = None,
-    quantities: Annotated[list[str] | None, Field(description="Quantities to store")] = None,
+    quantities: Annotated[list[str] | None, Field(description="Quantities to store"), JsonText] = None,
     stop_after_s: Annotated[float | None, Field(description="Safety stop at this simulation time "
                                                             "in s")] = 600.0,
     start: Annotated[bool, Field(description="Start the run at once (needs testrun)")] = False,
@@ -840,7 +863,7 @@ def cm_standalone_attach(
 def cm_standalone_status(
     instance: Instance = None,
     quantities: Annotated[list[str] | None, Field(description="Live quantities to read (default: Time, "
-                                                              "Car.v)")] = None,
+                                                              "Car.v)"), JsonText] = None,
 ) -> dict:
     """State of a standalone instance plus live values."""
     return SA().status(instance, quantities)
@@ -898,12 +921,12 @@ def cm_study_start(
                     "'10 1.5 1.5\\n90 5 5'}}. 'keys': infofile keys in memory "
                     "for that run; 'workspace': MATLAB variables in 'scope', restored after the run; "
                     "'driver': driver template values, in a copy deleted after the run. All optional",
-        max_length=100)] = None,
+        max_length=100), JsonText] = None,
     quantities: Annotated[list[str] | None, Field(description="Quantities to summarise per run (default: "
                                                               "Time, Car.v). Standalone they are also all "
                                                               "its result file stores, besides what timing "
                                                               "needs: list every quantity to plot "
-                                                              "later")] = None,
+                                                              "later"), JsonText] = None,
     mode: Annotated[Literal["auto", "cm4sl", "standalone"],
                     Field(description="cm4sl: the MATLAB-connected session. standalone: CarMaker without "
                                       "MATLAB (no 'workspace' values). auto: cm4sl if MATLAB is "
@@ -918,17 +941,23 @@ def cm_study_start(
     movie: Annotated[bool, Field(description="mode standalone: show the runs in IPGMovie")] = False,
     speed: Speed = None,
     gates: Annotated[list[float] | Literal["markers"] | None,
-                     Field(description="'markers': each row gets 'sectors', the times at the test run's "
-                                       "trigger point markers (as CarMaker's lap timing). Or road positions "
-                                       "in m: 'splits', the times between them")] = None,
+                     Field(description="'markers': each row gets 'sectors', the times CarMaker's lap "
+                                       "timing takes at the test run's trigger point markers, each from the "
+                                       "last reference marker (a lap on a skid pad). Or road positions in "
+                                       "m: 'splits', the times between them"), JsonText] = None,
     keep_open: Annotated[bool, Field(description="With movie: leave the last run in IPGMovie (close "
                                                  "it with cm_standalone_close)")] = False,
     grid: Annotated[dict[str, dict[str, list]] | None, Field(
         description="Every combination of value lists, added to variations: {'driver': "
-                    "{'Driver.Acc.ayMax': [12, 14], 'Driver.Acc.GGExp': ['10 1 1', '10 1.5 1.5\n90 5 5']}, "
-                    "'keys': {...}, 'workspace': {...}}; at most 100 runs")] = None,
+                    "{'Driver.Acc.ayMax': [12, 14]}, 'driver_scale': {'Driver.Acc.GGExp': [1, 2, 4]}, "
+                    "'keys': {...}, 'workspace': {...}}. driver_scale multiplies the driver's own value (a "
+                    "table: all but its first column). At most 100 runs"), JsonText] = None,
     close_open: Annotated[bool, Field(description="standalone: first close the CarMaker programs this "
                                                   "server left open (each holds a licence)")] = False,
+    rerun: Annotated[dict[str, Any] | None, Field(
+        description="Runs of an earlier study again: {'study': id, 'labels': ['best']}, e.g. with movie and "
+                    "keep_open to show the best run; an IPGMovie window kept open is "
+                    "reused"), JsonText] = None,
 ) -> dict:
     """Run one test run several times with different parameter values, one after another, in the
     background. Returns a study id at once; wait with cm_study_wait. Nothing is written to project files.
@@ -937,7 +966,7 @@ def cm_study_start(
     (use 'driver'). Rows give valid and wall_s, the clock time of the run. A study stops at the first
     run that finds no CarMaker licence."""
     return ST().start(testrun, variations, quantities, mode, scope, max_run_s, save_logs, movie, speed,
-                      gates, keep_open, grid, close_open)
+                      gates, keep_open, grid, close_open, rerun)
 
 
 @_tool(READ, "Parameter study progress and results")
@@ -945,10 +974,15 @@ def cm_study_status(
     study: Annotated[str | None, Field(description="Study id (default: the latest)")] = None,
     detail: Detail = "compact",
     rank_by: RankBy = None,
+    top: Annotated[int | None, Field(description="Only the best N of the ranking", ge=1)] = None,
+    with_studies: Annotated[list[str] | None, JsonText,
+                            Field(description="Rank these studies' runs together with this one's")] = None,
+    labels: Annotated[list[str] | None, Field(description="Only these rows"), JsonText] = None,
 ) -> dict:
     """State of a study (running, done, cancelled, failed) and one row per finished run, which also maps
-    every label to its result file. To wait for progress use cm_study_wait."""
-    return ST().status(study, detail, rank_by)
+    every label to its result file. The ranking names each run's result file. To wait use
+    cm_study_wait."""
+    return ST().status(study, detail, rank_by, labels, top, with_studies)
 
 
 @_tool(READ, "Wait for a parameter study")

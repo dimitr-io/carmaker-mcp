@@ -926,6 +926,20 @@ class Session:
                        "a Race adaption as long as the test run allows)")
         return out
 
+    def require_standalone(self, testrun: str, overrides: dict | None = None) -> None:
+        """Refuse a vehicle with Simulink parts outside CarMaker for Simulink (found in use: an agent
+        had to work this out from PowerTrain.Control.Kind)."""
+        try:
+            run = InfoFile.load(self.project.path("testrun", testrun)).to_dict()
+        except (OSError, ProjectError, GuardError):
+            return  # the launch itself says what is wrong with the test run
+        check = self.project.standalone_check(run, overrides)
+        if not check["standalone"]:
+            parts = ", ".join(f"{k} = {v}" for k, v in check["simulink_parts"].items())
+            raise BackendError(f"{testrun} uses a vehicle with Simulink parts ({parts}): it runs only in the "
+                               "MATLAB session (CarMaker for Simulink), not standalone. Use cm_session_start "
+                               "and the cm_* tools, or a vehicle without them")
+
     def standalone_driver(self, testrun: str, overrides: dict, driver: dict | None) -> tuple[dict, list]:
         """Driver values for one standalone program: a copy of the test run's driver template (or the
         values as keys if the driver is the one saved in the test run)."""

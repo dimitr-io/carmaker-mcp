@@ -90,9 +90,15 @@ test-run keys in memory, no file is edited. Close with `cm_standalone_close`.
   do that for every run (`logs_file` in the result).
 * Several settings of one test run: `cm_study_start` runs them one after another. Wait with `cm_study_wait`
   (not `cm_wait_end`, at most 50 s per call); it answers one brief line per run. `cm_study_status` gives
-  the table with result files, and `rank_by='sectors'` (or `'Car.v.max'`, ...) ranks the valid runs.
-  `grid` runs every combination of value lists (a g-g table is one value). A study stops at the first run
-  that finds no CarMaker licence; programs the server left open hold one (`close_open=true`).
+  the table; `rank_by='sectors'` (or `'Car.v.max'`, ...) ranks the valid runs with their result files,
+  `top` keeps the best, `with_studies` ranks several studies together, `labels` picks rows.
+  `grid` runs every combination of value lists (a g-g table is one value); `driver_scale` multiplies the
+  driver's own value instead (`{'Driver.Acc.GGExp': [1, 2, 4]}`: the exponents, not the speeds).
+  `rerun={'study': id, 'labels': ['best']}` with `movie=true, keep_open=true` shows a run again in
+  IPGMovie; a window an earlier study kept open is reused. A study stops at the first run that finds no
+  CarMaker licence; programs the server left open hold one (`close_open=true`). A vehicle with Simulink
+  parts (`PowerTrain.Control.Kind = CM4SL ...`) runs only in the MATLAB session: `cm_read` of the test
+  run says `standalone: false`, and standalone launches and studies refuse it.
   Only one study runs on a CarMaker session at a time, also across conversations: `cm_status` shows
   `study_running`, and loads, starts and stops are refused meanwhile. Cancel only a study you started.
 * A new file (a tyre property file with other values, for example): `cm_clone` to copy and `cm_edit` to change

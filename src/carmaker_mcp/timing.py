@@ -50,17 +50,20 @@ def sector_times(erg: Erg, markers: list[dict]) -> dict:
     otherwise from the road position (checked on a skid pad: within 2 to 6 ms of CarMaker's values)."""
     own = carmaker_times(erg)
     if own is not None:
-        # Accept CarMaker's value only if the reference marker was passed too and the value matches the
-        # time between the two passes. Found in use: in runs that left the road the first marker passed
-        # reported id 1 instead of 0, no reference was set, and every "time" read 0.001 s.
+        # Accept CarMaker's value only if the reference marker was passed too, the value matches the
+        # time between the two passes, and the car covered the road between the markers. Found in use:
+        # in runs that left the road, markers fired with nothing between them and "times" of 0.001 s,
+        # once even two markers 10 ms apart, far from both.
         time_at = {c["id"]: c["time"] for c in own}
         passed_at = {c["id"]: c["at_s"] for c in own}
+        s_of = {m["id"]: m["s"] for m in markers}
         sectors, ref = [], None
         for m in markers:
             if m["mode"] in (2, 3):
                 t = time_at.get(m["id"])
                 ok = (t is not None and ref is not None and ref in passed_at and m["id"] in passed_at
-                      and abs((passed_at[m["id"]] - passed_at[ref]) - t) < 0.1)
+                      and abs((passed_at[m["id"]] - passed_at[ref]) - t) < 0.1
+                      and _covered(erg, passed_at[ref], passed_at[m["id"]], m["s"] - s_of[ref]))
                 sectors.append({"id": m["id"], "s": m["s"], "time": t if ok else None})
             if m["mode"] in (1, 3):
                 ref = m["id"]
@@ -80,6 +83,18 @@ def sector_times(erg: Erg, markers: list[dict]) -> dict:
     if pos != "Vhcl.sRoad":
         out["note"] = "no Vhcl.sRoad in the result file: timed on the odometer Car.Distance, which reads long"
     return out
+
+
+def _covered(erg: Erg, t0: float, t1: float, gap: float) -> bool:
+    """The car drove at least half the road between two markers in that time (a driver cutting corners
+    drives less than the road, never half); without an odometer, at no more than 150 m/s."""
+    if gap <= 0:
+        return t1 - t0 > 0.5
+    if "Car.Distance" in erg.names:
+        t = erg.column("Time").astype(float)
+        d = erg.column("Car.Distance").astype(float)
+        return float(np.interp(t1, t, d) - np.interp(t0, t, d)) >= 0.5 * gap
+    return (t1 - t0) * 150.0 >= gap
 
 
 def carmaker_times(erg: Erg) -> list[dict] | None:

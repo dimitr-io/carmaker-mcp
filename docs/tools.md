@@ -308,7 +308,7 @@ Names of project data files of one kind (test runs, vehicles, drivers, tyres...)
 
 *Read a project data file* · read-only
 
-Key / value pairs of a CarMaker infofile. Large files are truncated: filter by keys or prefix. For a test run `driver` comes first: its driver template (or 'TestRun'), knowledge and main limits.
+Key / value pairs of a CarMaker infofile, 300 at a time: filter by keys, prefix or search, or page with offset. For a test run first `driver` (its template or 'TestRun', knowledge, main limits) and `standalone`: false names the vehicle's Simulink parts (runs need the MATLAB session).
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
@@ -316,6 +316,8 @@ Key / value pairs of a CarMaker infofile. Large files are truncated: filter by k
 | `name` | string | required | File name relative to the kind's folder, as cm_list returns it |
 | `keys` | list of string or null | null | Only these keys |
 | `prefix` | string or null | null | Only keys starting with this, e.g. 'Vehicle' or 'DrivMan.' |
+| `search` | string or null | null | Only keys containing this, any case, e.g. 'Control.Kind' |
+| `offset` | integer | `0` | Skip this many keys (paging: next_offset) |
 
 ### `cm_diff`
 
@@ -631,22 +633,26 @@ Run one test run several times with different parameter values, one after anothe
 | `save_logs` | boolean | `false` | After every run, save what Simulink logged and the workspaces as that run used them to a MAT file next to its result file (mode cm4sl; logs_file per row) |
 | `movie` | boolean | `false` | mode standalone: show the runs in IPGMovie |
 | `speed` | number or null | null | x real time; omit for CarMaker's maximum. Slower only if the user asks |
-| `gates` | list of number \| string or null | null | 'markers': each row gets 'sectors', the times at the test run's trigger point markers (as CarMaker's lap timing). Or road positions in m: 'splits', the times between them |
+| `gates` | list of number \| string or null | null | 'markers': each row gets 'sectors', the times CarMaker's lap timing takes at the test run's trigger point markers, each from the last reference marker (a lap on a skid pad). Or road positions in m: 'splits', the times between them |
 | `keep_open` | boolean | `false` | With movie: leave the last run in IPGMovie (close it with cm_standalone_close) |
-| `grid` | object or null | null | Every combination of value lists, added to variations: {'driver': {'Driver.Acc.ayMax': [12, 14], 'Driver.Acc.GGExp': ['10 1 1', '10 1.5 1.5 90 5 5']}, 'keys': {...}, 'workspace': {...}}; at most 100 runs |
+| `grid` | object or null | null | Every combination of value lists, added to variations: {'driver': {'Driver.Acc.ayMax': [12, 14]}, 'driver_scale': {'Driver.Acc.GGExp': [1, 2, 4]}, 'keys': {...}, 'workspace': {...}}. driver_scale multiplies the driver's own value (a table: all but its first column). At most 100 runs |
 | `close_open` | boolean | `false` | standalone: first close the CarMaker programs this server left open (each holds a licence) |
+| `rerun` | object or null | null | Runs of an earlier study again: {'study': id, 'labels': ['best']}, e.g. with movie and keep_open to show the best run; an IPGMovie window kept open is reused |
 
 ### `cm_study_status`
 
 *Parameter study progress and results* · read-only
 
-State of a study (running, done, cancelled, failed) and one row per finished run, which also maps every label to its result file. To wait for progress use cm_study_wait.
+State of a study (running, done, cancelled, failed) and one row per finished run, which also maps every label to its result file. The ranking names each run's result file. To wait use cm_study_wait.
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
 | `study` | string or null | null | Study id (default: the latest) |
 | `detail` | `brief` \| `compact` \| `full` | `"compact"` | brief: per run label, valid, end status, sector or split times, abort reason. compact: also time, distance, result file and min / max / mean / last of the quantities. full: also every run's keys, workspace values and all statistics |
 | `rank_by` | string or null | null | Rank the valid runs: 'sectors' (mean sector time), 'splits' (their sum), 'sim_time', or a quantity statistic such as 'Car.v.max'; '-' first for largest first |
+| `top` | integer or null | null | Only the best N of the ranking |
+| `with_studies` | list of string or null | null | Rank these studies' runs together with this one's |
+| `labels` | list of string or null | null | Only these rows |
 
 ### `cm_study_wait`
 

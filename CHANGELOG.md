@@ -14,6 +14,17 @@ parameters may still change between minor versions.
 - `cm_study_status(rank_by=...)` ranks the valid runs by their mean sector time, the sum of their splits,
   the simulation time or a quantity statistic such as `Car.v.max` (`-` for largest first).
 - `cm_diff(kind, a, b)` compares two project files: keys only in a, only in b, and differing values.
+- `cm_study_status`: `top`, `with_studies` (one ranking over several studies, for coarse-to-fine sweeps)
+  and `labels`; ranking entries name the run's result file.
+- `grid={"driver_scale": {...}}` multiplies the driver's own value by each factor; for a table such as
+  `Driver.Acc.GGExp` every column but the first (the speeds), labelled `GGExp×2`.
+- `cm_study_start(rerun={"study": id, "labels": [...]})` runs rows of an earlier study again, for example
+  the best one with `movie=true, keep_open=true`. A movie study reuses the program and IPGMovie window an
+  earlier study kept open instead of closing it.
+- `cm_read` of a test run says whether its vehicle can run standalone (`standalone`, `simulink_parts`:
+  parts of kind `CM4SL`); `cm_standalone_launch` and standalone studies refuse such a vehicle with that
+  reason. `cm_read` also takes `search` (part of the key name) and `offset` for paging (`next_offset`).
+- Study answers with `gates="markers"` say which markers the sectors are and what they measure.
 - A standalone study stops at the first run that finds no CarMaker licence, instead of failing run after
   run. `cm_study_start` names the CarMaker programs this server left open (each holds a licence), and
   `close_open=true` closes them first.
@@ -106,7 +117,12 @@ parameters may still change between minor versions.
 
 ### Fixed
 - Sector times of a run that left the road read 0.001 s: CarMaker's trigger values are now used only when
-  the reference marker was passed and the value matches the time between the passes; otherwise `null`.
+  the reference marker was passed, the value matches the time between the passes and the car covered at
+  least half the road between the markers (found in use: two markers fired 10 ms apart as the car left
+  the road); otherwise `null`. Rechecked on 152 recorded rows: the 15 aborted ones with 0.001 s are now
+  `null`, no completed run changed.
+- List and object parameters sent as JSON text are read (found in use: `gates=[...]` arrived as a string
+  from a client and was refused).
 - A standalone study with `movie=true` started a new program and IPGMovie for every run, so the window
   closed before anything could be seen. The study now keeps one program and one IPGMovie window for all
   its runs (a program that ended is replaced) and closes them after the last run. Without a program
