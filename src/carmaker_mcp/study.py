@@ -210,9 +210,9 @@ class StudyRunner:
         if len(variations) > MAX_RUNS:
             raise BackendError(f"{len(variations)} runs: at most {MAX_RUNS} per study")
         runs = check_variations(variations, mode)
-        if mode == "standalone":  # once per vehicle the runs use
-            for keys in {v["keys"].get("Vehicle"): v["keys"] for v in runs}.values():
-                self.session.require_standalone(testrun, keys)
+        if mode == "standalone":  # a car without Simulink parts, and no vehicle keys (ignored there)
+            for v in runs:
+                self.session.require_standalone(testrun, v["keys"])
         markers = None
         if gates == "markers":  # the test run's trigger points, as the CarMaker instrument times them
             markers = timing.trigger_markers(self.session.project.read("testrun", testrun,

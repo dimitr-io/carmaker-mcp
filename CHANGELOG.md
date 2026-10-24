@@ -33,7 +33,10 @@ parameters may still change between minor versions.
     scope it read; an IPGControl plot window closes with the server.
   - The server instructions describe the standalone route, and `cm_status` without MATLAB says that
     standalone work needs none; the guide's standalone and IPGMovie sections cover studies, driver
-    values, vehicle keys in overrides (checked in the MATLAB session), quantities and `movie=true`.
+    values, quantities and `movie=true`.
+  - Standalone launches and studies refuse keys of the vehicle file (`Body.mass`): checked live, a
+    standalone run ignores them and gives the baseline result. The answer says how to make a vehicle
+    variant (clone the vehicle, name it with `Vehicle`); in the MATLAB session such keys do apply.
 - Standalone driver adaptions share one CarMaker GUI of the server's own, instead of one opened and closed
   per adaption; between adaptions only its simulation program is stopped, so the CarMaker licence is free
   for standalone runs. `cm_driver_adaption(action="close")` ends it (it also ends with the server). An

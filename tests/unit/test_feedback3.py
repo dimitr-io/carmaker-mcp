@@ -5,6 +5,7 @@ import pytest
 from test_results import make_erg
 
 from carmaker_mcp import log as sessionlog
+from carmaker_mcp.backend import BackendError
 from carmaker_mcp.results import Erg
 from carmaker_mcp.server import _from_json_text
 from carmaker_mcp.study import metric
@@ -67,8 +68,8 @@ def test_status_without_matlab_points_to_standalone(session, mock):
     assert "need no MATLAB" in session.status()["standalone_note"]
 
 
-@pytest.mark.parametrize("key", ["Body.mass", "Vehicle"])
-def test_launch_overrides_may_name_vehicle_keys(key):
-    from carmaker_mcp.server import Overrides  # the description says so (found in use: an agent cloned files)
-
-    assert key in str(Overrides.__metadata__[0].description)
+def test_vehicle_keys_are_refused_standalone(session, project):
+    """Checked live: a standalone override of Body.mass gave the baseline result exactly."""
+    with pytest.raises(BackendError, match="Body.mass: keys of the vehicle file"):
+        session.require_standalone("Sub/Run1", {"Body.mass": 300})
+    session.require_standalone("Sub/Run1", {"Road.FName": "B.rd5", "Vehicle": "Test_Vehicle"})  # fine

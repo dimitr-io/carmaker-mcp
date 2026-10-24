@@ -242,10 +242,10 @@ Detail = Annotated[Literal["brief", "compact", "full"],
 RankBy = Annotated[str | None, Field(description="Rank the valid runs: 'sectors' (mean sector time), "
                                                  "'splits' (their sum), 'sim_time', or a quantity statistic "
                                                  "such as 'Car.v.max'; '-' first for largest first")]
-Overrides = Annotated[dict[str, Any] | None, Field(description="Keys to change in memory only: test-run "
-                                                               "keys, 'Vehicle' (another car) and vehicle "
-                                                               "keys, e.g. {'Vehicle': 'Car_B', "
-                                                               "'Body.mass': 300}"), JsonText]
+Overrides = Annotated[dict[str, Any] | None, Field(description="Test-run keys to change in memory only, "
+                                                               "e.g. {'Vehicle': 'Car_B'} for another car. "
+                                                               "Vehicle keys (Body.mass) do not reach a "
+                                                               "standalone run: clone the vehicle"), JsonText]
 
 
 # ---- setup ---------------------------------------------------------------------------

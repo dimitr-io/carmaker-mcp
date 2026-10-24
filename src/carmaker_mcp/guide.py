@@ -88,9 +88,12 @@ study refuses such a car. `cm_status` concerns only the MATLAB session.
 * One run: `cm_standalone_launch(testrun, overrides?, driver?, quantities?, movie?)`, then
   `cm_standalone_wait_end` (repeat until finished), `cm_standalone_results` (the result file), and
   `cm_standalone_close`. The answer names the `vehicle` it uses.
-* `overrides` changes keys in memory, nothing is written: test-run keys, `Vehicle` (another car), and
-  vehicle keys such as `Body.mass` (checked in the MATLAB session: a heavier car ran slower; plain and
-  `Vehicle:`-prefixed keys gave the same). `driver` takes Driver.* values (a temporary template copy).
+* `overrides` changes test-run keys in memory, nothing is written; `Vehicle` picks another car. Keys of
+  the vehicle file (e.g. `Body.mass`) do not reach a standalone run (checked: the result was identical
+  to the baseline), so launches and studies refuse them: for a vehicle variant copy the vehicle
+  (`cm_clone`), change the copy (`cm_edit`) and name it with `Vehicle`; `cm_revert_all` removes the
+  copies. In the MATLAB session vehicle keys do reach the car (a heavier car ran slower).
+  `driver` takes Driver.* values (a temporary template copy).
 * `quantities` is what the result file stores (default Time, Car.v, Car.YawRate, Car.ax, Car.ay,
   Car.Distance): list everything you will read or plot later.
 * `movie=true` shows the run in IPGMovie (no MATLAB needed); it closes with the program.

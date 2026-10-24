@@ -967,6 +967,12 @@ class Session:
             return  # the launch itself says what is wrong with the test run
         check = self.project.standalone_check(run, overrides)
         self.last_standalone_vehicle = (overrides or {}).get("Vehicle") or run.get("Vehicle")
+        if check.get("vehicle_keys"):
+            raise BackendError(
+                f"{', '.join(check['vehicle_keys'])}: keys of the vehicle file, which a standalone run "
+                "ignores (checked live: the result was identical to the baseline). Standalone, a run "
+                "changes only test-run keys: copy the vehicle (cm_clone), change the copy (cm_edit) and name "
+                "it with 'Vehicle'. In the MATLAB session such keys do reach the car")
         if not check["standalone"]:
             parts = ", ".join(f"{k} = {v}" for k, v in check["simulink_parts"].items())
             raise BackendError(f"{testrun} uses a vehicle with Simulink parts ({parts}): it runs only in the "

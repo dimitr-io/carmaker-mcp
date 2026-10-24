@@ -524,7 +524,7 @@ Start a NEW independent CarMaker simulation program (not connected to MATLAB) an
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
 | `testrun` | string | required | Test run relative to Data/TestRun |
-| `overrides` | object or null | null | Keys to change in memory only: test-run keys, 'Vehicle' (another car) and vehicle keys, e.g. {'Vehicle': 'Car_B', 'Body.mass': 300} |
+| `overrides` | object or null | null | Test-run keys to change in memory only, e.g. {'Vehicle': 'Car_B'} for another car. Vehicle keys (Body.mass) do not reach a standalone run: clone the vehicle |
 | `quantities` | list of string or null | null | Quantities to store (default: Time, Car.v, Car.YawRate, Car.ax, Car.ay, Car.Distance) |
 | `stop_after_s` | number or null | `600.0` | Safety stop at this simulation time in s (null: none) |
 | `executable` | string or null | null | CarMaker executable (default: the stock one of the install) |
@@ -543,7 +543,7 @@ Attach to a CarMaker simulation program that is already running, for example one
 |---|---|---|---|
 | `pid` | integer | required | Process id from cm_standalone_servers |
 | `testrun` | string or null | null | Test run to configure (needed to start a run) |
-| `overrides` | object or null | null | Keys to change in memory only: test-run keys, 'Vehicle' (another car) and vehicle keys, e.g. {'Vehicle': 'Car_B', 'Body.mass': 300} |
+| `overrides` | object or null | null | Test-run keys to change in memory only, e.g. {'Vehicle': 'Car_B'} for another car. Vehicle keys (Body.mass) do not reach a standalone run: clone the vehicle |
 | `quantities` | list of string or null | null | Quantities to store |
 | `stop_after_s` | number or null | `600.0` | Safety stop at this simulation time in s |
 | `start` | boolean | `false` | Start the run at once (needs testrun) |

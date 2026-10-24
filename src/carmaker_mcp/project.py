@@ -170,6 +170,13 @@ class Project:
         out: dict[str, Any] = {"standalone": not parts}
         if parts:
             out["simulink_parts"] = parts
+        # Checked live: a standalone override of a vehicle key (Body.mass) changed nothing, the result
+        # was identical to the baseline; standalone overrides reach only the test run's own keys.
+        vehicle_keys = sorted(k for k in (overrides or {})
+                              if k.split(":", 1)[-1] in values and k.split(":", 1)[-1] not in testrun
+                              and k != "Vehicle" and not k.startswith("Driver."))
+        if vehicle_keys:
+            out["vehicle_keys"] = vehicle_keys
         return out
 
     def diff(self, kind: str, a: str, b: str, prefix: str | None = None, max_items: int = 300) -> dict:
