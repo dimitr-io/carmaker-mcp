@@ -215,8 +215,10 @@ class StudyRunner:
                 self.session.require_standalone(testrun, v["keys"])
         markers = None
         if gates == "markers":  # the test run's trigger points, as the CarMaker instrument times them
-            markers = timing.trigger_markers(self.session.project.read("testrun", testrun,
-                                                                         max_items=100000)["values"])
+            # the markers are Road.* keys, which an unfiltered read leaves out (found in use: every
+            # marker study was refused after that change)
+            markers = timing.trigger_markers(self.session.project.read(
+                "testrun", testrun, prefix="Road.", max_items=100000)["values"])
             if not any(m["mode"] in (2, 3) for m in markers):
                 raise BackendError(
                     f"{testrun} has no trigger point markers that take a time (mode 2 or 3). On a course "

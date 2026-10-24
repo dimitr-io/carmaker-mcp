@@ -73,3 +73,19 @@ def test_vehicle_keys_are_refused_standalone(session, project):
     with pytest.raises(BackendError, match="Body.mass: keys of the vehicle file"):
         session.require_standalone("Sub/Run1", {"Body.mass": 300})
     session.require_standalone("Sub/Run1", {"Road.FName": "B.rd5", "Vehicle": "Test_Vehicle"})  # fine
+
+
+def test_a_marker_study_finds_the_markers_a_short_read_leaves_out(session, project):
+    """Found in use: after test-run reads left the Road.* keys out, every marker study was refused."""
+    from test_study import FakeStandalone
+
+    from carmaker_mcp.study import StudyRunner
+
+    (project / "Data" / "TestRun" / "Sub" / "Laps").write_text(
+        "#INFOFILE1.1 (UTF-8) - Do not remove this line!\nVehicle = Test_Vehicle\n"
+        "Road.RL.1.Marker.0.Type = DrivManTrigger\nRoad.RL.1.Marker.0.Param = 72.3 0 0 1 0\n"
+        "Road.RL.1.Marker.1.Type = DrivManTrigger\nRoad.RL.1.Marker.1.Param = 129.7 0 0 3 1\n")
+    runner = StudyRunner(session, lambda: FakeStandalone())
+    r = runner.start("Sub/Laps", [{}], mode="standalone", gates="markers")
+    assert "markers [1]" in r["sectors"]
+    runner.wait()
