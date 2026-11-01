@@ -21,7 +21,7 @@ parameters may still change between minor versions.
 - `cm_study_start(rerun={"study": id, "labels": [...]})` runs rows of an earlier study again, for example
   the best one with `movie=true, keep_open=true`. A movie study reuses the program and IPGMovie window an
   earlier study kept open instead of closing it.
-- Five agents (Haiku, xhigh) each did a task with the server and reported what was hard. From that:
+- From use on real tasks:
   - Every run's answer and study row on a lap-driven course has `lap_times`, CarMaker's own from its log
     (`rank_by='laps'`): the result file never holds the last lap of a run that ends with it.
   - `cm_read` of a test run leaves the road geometry and traffic keys out unless asked for (`left_out`
@@ -37,7 +37,7 @@ parameters may still change between minor versions.
   - Standalone launches and studies refuse keys of the vehicle file (`Body.mass`): checked live, a
     standalone run ignores them and gives the baseline result. The answer says how to make a vehicle
     variant (clone the vehicle, name it with `Vehicle`); in the MATLAB session such keys do apply.
-- A second round of five agents, on the code above. From it:
+- From a second round of use, on the code above:
   - Wait answers and study rows say how a run `ended` ("aborted" with `end_reason`, e.g. an empty
     battery or the car leaving the road), which was only in the full log before.
   - A standalone launch or study refuses a test run whose driver template does not exist (it used to

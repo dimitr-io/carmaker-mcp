@@ -1,4 +1,4 @@
-"""Third round from use (five agents): lap times of lap-driven runs, the change log's default, quoted
+"""Third round from use: lap times of lap-driven runs, the change log's default, quoted
 strings, values at a crossing, a shorter test-run read with its timing, the standalone hint."""
 
 import pytest

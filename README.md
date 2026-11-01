@@ -2,12 +2,7 @@
 
 <!-- mcp-name: io.github.dimitr-io/carmaker-mcp -->
 
-An [MCP](https://modelcontextprotocol.io) server that lets an AI agent drive **IPG CarMaker** on your
-computer: start a session, run test runs and parameter studies, read and plot the results, change vehicle,
-driver and Simulink controller parameters, and undo what it changed.
-
-<!-- Video: upload the mp4 in GitHub's web editor and put the link it gives on the next line. -->
-https://github.com/user-attachments/assets/VIDEO-ID
+https://github.com/user-attachments/assets/6093b1a3-8ef5-43ef-8134-b214d534720f
 
 *Claude Desktop with this server (CarMaker without MATLAB, IPGMovie open) and MathWorks'
 [MATLAB MCP server](https://github.com/matlab/matlab-mcp-core-server) for the figure. A 68-run sweep of
@@ -23,6 +18,10 @@ the driver's limits on a Formula Student skid pad; the agent's work is shown 30 
 > best run using MATLAB (MCP).
 
 </details>
+
+An [MCP](https://modelcontextprotocol.io) server that lets an AI agent drive **IPG CarMaker** on your
+computer: start a session, run test runs and parameter studies, read and plot the results, change vehicle,
+driver and Simulink controller parameters, and undo what it changed.
 
 > Unofficial community project, not affiliated with or endorsed by IPG Automotive or MathWorks. You need your
 > own CarMaker and MATLAB/Simulink licences. This repository contains no IPG or MathWorks code or data.
@@ -302,7 +301,7 @@ content as shown for Antigravity. Most other clients use that `mcpServers` forma
 </details>
 
 In JSON and TOML, write Windows paths with double backslashes or with forward slashes. So far only Claude Code
-has been used with this server; the other entries follow each client's documented format.
+and Claude Desktop have been used with this server; the other entries follow each client's documented format.
 
 ### 3. Start a session
 
