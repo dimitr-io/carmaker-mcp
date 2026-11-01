@@ -76,6 +76,10 @@ MATLAB: it keeps the licence after its first simulation, also when the CarMaker 
 that model or MATLAB, or run the test in the MATLAB-connected session. `cm_standalone_servers` lists the
 CarMaker programs that are running.
 
+**"Unable to obtain CarMaker license: license has expired"**
+No program is in the way: the licence must be renewed. `carmaker-mcp doctor` shows its end date. No CarMaker
+program can start until the licence file is replaced.
+
 **"IPGMovie wrote no picture"**
 IPGMovie only holds what it recorded. It must be open before the run starts (`cm_movie_open`), and a picture
 exported with `time_s` while a run is going on ends its recording of that run. For any other run, replay the

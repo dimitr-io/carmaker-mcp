@@ -132,6 +132,8 @@ parameters may still change between minor versions.
   of its own, so these runs could not be watched before. IPGMovie closes with the program.
 
 ### Changed
+- The README is shorter: the steps per client, every setting and the MATLAB MCP server moved to
+  `docs/setup.md`, and what the server does not cover to `docs/scope.md`.
 - `cm_study_wait` answers one brief line per run (label, valid, end status, sector or split times, abort
   reason); `detail` gives more. `cm_study_status` takes `detail="brief"` too.
 - Waits (`timeout_s`, `max_wait_s`) are cut to 50 s: a client that ends tool calls after 60 s cut a
