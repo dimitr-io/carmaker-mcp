@@ -1,6 +1,11 @@
+
+
+
 # carmaker-mcp
 
 <!-- mcp-name: io.github.dimitr-io/carmaker-mcp -->
+
+https://github.com/user-attachments/assets/6093b1a3-8ef5-43ef-8134-b214d534720f
 
 An [MCP](https://modelcontextprotocol.io) server that lets an AI agent drive **IPG CarMaker** on your
 computer: start a session, run test runs, read the results, change vehicle data and Simulink controller
