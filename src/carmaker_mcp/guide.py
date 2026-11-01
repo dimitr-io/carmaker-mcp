@@ -125,9 +125,10 @@ study refuses such a car. `cm_status` concerns only the MATLAB session.
   driver's own value instead (`{'Driver.Acc.GGExp': [1, 2, 4]}`: the exponents, not the speeds).
   `rerun={'study': id, 'labels': ['best']}` with `movie=true, keep_open=true` shows a run again in
   IPGMovie; a window an earlier study kept open is reused. A study stops at the first run that finds no
-  CarMaker licence; programs the server left open hold one (`close_open=true`). A vehicle with Simulink
+  CarMaker licence: "too many licenses" means a program holds it (programs the server left open:
+  `close_open=true`), "license has expired" that it must be renewed. A vehicle with Simulink
   parts (`PowerTrain.Control.Kind = CM4SL ...`) runs only in the MATLAB session: `cm_read` of the test
-  run says `standalone: false`, and standalone launches and studies refuse it.
+  run or of the vehicle says `standalone: false`, and standalone launches and studies refuse it.
   Only one study runs on a CarMaker session at a time, also across conversations: `cm_status` shows
   `study_running`, and loads, starts and stops are refused meanwhile. Cancel only a study you started.
 * A new file (a tyre property file with other values, for example): `cm_clone` to copy and `cm_edit` to change

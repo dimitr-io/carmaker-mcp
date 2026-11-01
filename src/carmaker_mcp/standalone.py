@@ -109,14 +109,16 @@ def _alive(pid: int) -> bool:
         kernel32.CloseHandle(handle)
 
 
-def _launch_failure(error: Exception, log_lines: list[str], own: list[str] | None = None) -> str:
+def _launch_failure(error: Exception, log_lines: list[str], own: list[str] | None = None,
+                    log_file: Path | None = None) -> str:
     """Why a launched CarMaker program could not be used, from its own log if it wrote one."""
     errs = [" ".join(ln.split()) for ln in sessionlog.filter_level(log_lines, "error")]
     errs = [e for e in errs if "FATAL ERROR - Application stopped" not in e]
     if not errs:
         return f"CarMaker did not start: {type(error).__name__}: {str(error).splitlines()[0][:300]}"
     msg = "CarMaker started but stopped with an error: " + " | ".join(errs[:3])
-    if any("license" in e.lower() for e in errs):
+    text = " ".join(errs).lower()
+    if "too many licenses" in text:
         if own:  # found in use: the holder was a finished instance of this server, not MATLAB
             msg += (f". This server still has standalone programs open, each holding a licence: "
                     f"{', '.join(own)}. cm_standalone_close frees one")
@@ -124,7 +126,9 @@ def _launch_failure(error: Exception, log_lines: list[str], own: list[str] | Non
             msg += (". Another CarMaker program is holding the licence, for example the CarMaker for "
                     "Simulink engine of an open MATLAB (closing the CarMaker GUI window does not release "
                     "it): close that model or MATLAB, or use the MATLAB-connected session instead")
-    return msg
+    elif "license has expired" in text:  # found in use: the hint above sent an agent after a holder
+        msg += ". No program is in the way: the licence must be renewed (cm_doctor shows its date)"
+    return f"{msg}. Log: {log_file}" if log_file else msg
 
 
 def _server_spec(info) -> dict:
@@ -256,7 +260,8 @@ class StandaloneManager:
                 await self._abandon(sc, master)
                 own = [f"{i.id} ({'finished' if i.finished.is_set() else 'running'}, {i.testrun})"
                        for i in self.instances.values() if i.kind == "launched"]
-                raise BackendError(_launch_failure(e, sessionlog.since(proj, mark), own)) from e
+                raise BackendError(_launch_failure(e, sessionlog.since(proj, mark), own,
+                                                   sessionlog.newest_log(proj))) from e
             inst = Instance(iid, "launched", sc, master, var, master.get_pid(), testrun,
                             stop_after_s=stop_after_s, finished=asyncio.Event(), project=proj, log_mark=mark)
             inst.temp_files = list(temp_files or [])
@@ -415,6 +420,8 @@ class StandaloneManager:
 
     # ---- operations -----------------------------------------------------------
     def status(self, instance: str | None = None, quantities: list[str] | None = None) -> dict:
+        if instance is None and not self.instances:
+            return {"instances": [], "note": "no standalone instance is open"}
         inst = self._inst(instance)
         names = list(quantities or ["Time", "Car.v"])
 

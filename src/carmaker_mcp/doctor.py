@@ -14,6 +14,7 @@ import re
 import sys
 import tempfile
 from dataclasses import asdict, dataclass, field
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -53,7 +54,7 @@ class Report:
     def ready(self) -> dict:
         """What can work as things are: standalone runs need no MATLAB (found in use: ok was false only
         because the MATLAB session was missing, and the agent took standalone work for broken too)."""
-        need = ("CarMaker install", "project folder", "state folder")
+        need = ("CarMaker install", "CarMaker licence", "project folder", "state folder")
         standalone = all(c.ok is not False for c in self.checks if c.name in need)
         return {"cm4sl": self.ok, "standalone": standalone}
 
@@ -161,6 +162,16 @@ def shared_sessions() -> list[str] | None:
         return []
 
 
+def licence_ends(text: str) -> list[date | None]:
+    """End date of each CarMaker entry of an IPG licence file; None for an entry without one."""
+    ends: list[date | None] = []
+    for block in re.split(r"^(?=Product\s)", text, flags=re.M)[1:]:
+        if block.split()[1:2] == ["CarMaker"]:
+            m = re.search(r"^\s*Expiration\s+(\d{4})-(\d\d)-(\d\d)\s*$", block, flags=re.M)
+            ends.append(date(int(m[1]), int(m[2]), int(m[3])) if m else None)
+    return ends
+
+
 def python_version() -> str:
     return f"{sys.version_info.major}.{sys.version_info.minor}"
 
@@ -177,7 +188,8 @@ _PROBE: Any = object()  # "ask the machine" (None is a valid answer for sessions
 
 
 def diagnose(cfg: Config, installs: dict[str, str] | None = None, sessions: list[str] | None = _PROBE,
-             engine: str | None = _PROBE, gui_status: Any = None, matlab_sees: Any = None) -> Report:
+             engine: str | None = _PROBE, gui_status: Any = None, matlab_sees: Any = None,
+             today: date | None = None) -> Report:
     """Collect all checks. The optional arguments replace the machine probes (for tests);
     ``gui_status`` is a callable returning a backend ``Status`` and ``matlab_sees`` one that tells
     whether MATLAB sees a folder; both are only used when the shared MATLAB session exists."""
@@ -205,6 +217,21 @@ def diagnose(cfg: Config, installs: dict[str, str] | None = None, sessions: list
             f"run the server with Python {rep.recommended_python} (uvx --python {rep.recommended_python} ...)"
             if rep.recommended_python else "this CarMaker has no cmapi for Python 3.10 or newer",
         )
+        # Found in use: an expired licence still read as ready, and every launch then failed. Only the
+        # date is checked: a licence that is in use shows up when a program starts.
+        licences = cm_home.parent.parent / "etc" / "Licenses.dat"
+        ends = licence_ends(licences.read_text(errors="replace")) if licences.is_file() else []
+        if not ends:
+            rep.add("CarMaker licence", None, f"no CarMaker entry in {licences}: not checked (a licence "
+                                              "server may provide it)")
+        elif None in ends:
+            rep.add("CarMaker licence", True, f"{licences}: no end date")
+        else:
+            last = max(e for e in ends if e)
+            valid = last >= (today or date.today())
+            state = "valid until" if valid else "expired on"
+            rep.add("CarMaker licence", valid, f"{licences}: {state} {last}",
+                    "renew the licence and replace that file: no CarMaker program starts until then")
 
     # MATLAB release that CarMaker for Simulink supports
     supported = cm_matlab_releases(cm_home) if cm_home is not None else []

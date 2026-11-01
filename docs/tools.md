@@ -309,7 +309,7 @@ Names of project data files of one kind (test runs, vehicles, drivers, tyres...)
 
 *Read a project data file* · read-only
 
-Key / value pairs of a CarMaker infofile, 300 at a time: filter by keys, prefix or search, or page with offset. For a test run first `driver` (its template or 'TestRun', knowledge, main limits) and `standalone`: false names the vehicle's Simulink parts (runs need the MATLAB session).
+Key / value pairs of a CarMaker infofile, 300 at a time: filter by keys, prefix or search, or page with offset. For a test run first `driver` (its template or 'TestRun', knowledge, main limits) and, also for a vehicle, `standalone`: false names the vehicle's Simulink parts (runs need the MATLAB session).
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|

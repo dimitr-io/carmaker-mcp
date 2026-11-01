@@ -53,6 +53,15 @@ parameters may still change between minor versions.
     `gates="markers"` study was refused.
   - Texts: the race driver still uses the g-g exponents; `cm_movie_snapshot` needs the MATLAB session's
     IPGMovie; a MATLAB timeout no longer guesses "busy simulating?"; `elapsed_s` is the wait's own time.
+- From a licence that ran out while an agent was testing:
+  - `cm_doctor` checks the end date in the licence file: an expired licence is a failed check and neither
+    mode is ready. Before, it said standalone studies work, and every launch failed.
+  - A launch or study stopped by an expired licence says so and no longer blames a program holding it or
+    offers `close_open`; a failed launch names its log file.
+  - `cm_read` of a vehicle gives `standalone` and `simulink_parts`, so a car can be checked before it is
+    used as an override.
+  - `cm_standalone_status` with nothing open and `cm_popups` without MATLAB answer normally, not with an
+    error.
 - Standalone driver adaptions share one CarMaker GUI of the server's own, instead of one opened and closed
   per adaption; between adaptions only its simulation program is stopped, so the CarMaker licence is free
   for standalone runs. `cm_driver_adaption(action="close")` ends it (it also ends with the server). An

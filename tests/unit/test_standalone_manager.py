@@ -242,8 +242,7 @@ def test_attach_without_and_with_testrun(mgr):
 
 
 def test_instance_selection_and_errors(mgr, tmp_path):
-    with pytest.raises(BackendError, match="specify instance"):
-        mgr.status()
+    assert mgr.status()["instances"] == []
     mgr.launch("A")
     mgr.launch("B")
     with pytest.raises(BackendError, match="specify instance"):

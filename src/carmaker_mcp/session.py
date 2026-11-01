@@ -464,6 +464,9 @@ class Session:
         return old
 
     def popup_status(self) -> dict:
+        if not self.backend.status().connected:  # found in use: standalone work read this as an error
+            return {"messages": [], "note": "pop-ups belong to the GUI of the MATLAB session; standalone "
+                                            "programs report in cm_log"}
         return {"timeout_s": self.popup_timeout(), "messages": self.popups()}
 
     @_locked

@@ -63,6 +63,9 @@ def test_older_matlab_gets_the_python_its_engine_installs_on(cfg):
 
 
 def test_healthy_machine(cfg):
+    etc = cfg.cm_home.parent.parent / "etc"
+    etc.mkdir()
+    (etc / "Licenses.dat").write_text("Product CarMaker\n\tExpiration\t2999-12-31\n")
     rep = doctor.diagnose(cfg, installs=INSTALLS, sessions=["cm_mcp"], engine="24.2.2",
                           gui_status=lambda: Status(connected=True, sim_status=-2, sim_status_text="idle"))
     assert rep.ok and all(c.ok for c in rep.checks)

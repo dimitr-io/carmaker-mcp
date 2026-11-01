@@ -113,7 +113,7 @@ def licence_trouble(row: dict) -> str | None:
     """The licence message of a run that could not start for lack of a CarMaker licence."""
     for text in [row.get("error") or "", *(row.get("log_errors") or [])]:
         if "licens" in text.lower():
-            return text[:300]
+            return text[:500]
     return None
 
 
@@ -590,9 +590,10 @@ class StudyRunner:
                 self._save(st)
                 trouble = licence_trouble(row)
                 if trouble:  # every further run would fail the same way
-                    st["error"] = (f"stopped after run {i + 1}: no CarMaker licence ({trouble}). Close the "
-                                   "programs that hold one (cm_standalone_servers, cm_standalone_close), or "
-                                   "start the study again with close_open=true")
+                    st["error"] = f"stopped after run {i + 1}: no CarMaker licence ({trouble})"
+                    if "too many licenses" in trouble.lower():  # not when it has expired, say
+                        st["error"] += (". Close the programs that hold one (cm_standalone_servers, "
+                                        "cm_standalone_close), or start the study again with close_open=true")
                     break
             st["state"] = "failed" if st.get("error") else "cancelled" if cancel.is_set() else "done"
         except Exception as e:  # a bug must not leave the study 'running' for ever

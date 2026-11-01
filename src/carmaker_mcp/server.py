@@ -645,8 +645,9 @@ def cm_read(
     offset: Annotated[int, Field(description="Skip this many keys (paging: next_offset)", ge=0)] = 0,
 ) -> dict:
     """Key / value pairs of a CarMaker infofile, 300 at a time: filter by keys, prefix or search, or page
-    with offset. For a test run first `driver` (its template or 'TestRun', knowledge, main limits) and
-    `standalone`: false names the vehicle's Simulink parts (runs need the MATLAB session)."""
+    with offset. For a test run first `driver` (its template or 'TestRun', knowledge, main limits) and,
+    also for a vehicle, `standalone`: false names the vehicle's Simulink parts (runs need the MATLAB
+    session)."""
     return S().project.read(kind, name, keys, prefix, search=search, offset=offset)
 
 

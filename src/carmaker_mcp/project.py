@@ -141,6 +141,8 @@ class Project:
             out["driver"] = self.driver(info.to_dict())
             out.update(self.standalone_check(info.to_dict()))
             out["timing"] = timing_summary(info.to_dict())
+        elif kind == "vehicle":  # found in use: an agent searched for the Kind keys of the car it wanted
+            out.update(self.standalone_check({"Vehicle": name}))
         out.update({"total_keys": total, "returned": len(items), "values": items})
         if offset + len(items) < total:
             out["next_offset"] = offset + len(items)
