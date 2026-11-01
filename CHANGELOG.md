@@ -6,7 +6,7 @@ parameters may still change between minor versions.
 
 ## [Unreleased]
 
-## [0.3.0] - 2026-10-22
+## [0.3.0] - 2026-11-01
 
 ### Added
 - `cm_study_start(grid={...})` runs every combination of value lists for `keys`, `driver` and `workspace`
